@@ -26,7 +26,6 @@ a 2D mesh over latitudes and longitudes.
 """
 
 from typing import Any, Callable, Mapping, Optional
-import warnings
 
 import chex
 from graphcast import deep_typed_graph_net
@@ -442,7 +441,6 @@ class GraphCast(predictor_base.Predictor):
     for key in [t2m, u10m, v10m, psfc, precip]:
         if key not in targets:
             val = per_variable_weights.pop(key)
-            warnings.warn(f"Could not find {key} in targets dataset, will not add variable specific loss weighting of {val}")
 
     loss = losses.weighted_mse_per_level(
         predictions, targets,
