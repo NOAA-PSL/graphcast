@@ -67,7 +67,7 @@ class StackedBfloat16Cast(Bfloat16Cast):
            inputs: chex.Array,
            targets: chex.Array,
            **kwargs,
-           ) -> stacked_predictor_base.LossAndDiagnostics:
+           ) -> chex.Array:
     if not self._enabled:
       return self._predictor.loss(inputs, targets, forcings, **kwargs)
 
@@ -92,7 +92,7 @@ class StackedBfloat16Cast(Bfloat16Cast):
       inputs: chex.Array,
       targets: chex.Array,
       **kwargs,
-      ) -> Tuple[stacked_predictor_base.LossAndDiagnostics,
+      ) -> Tuple[chex.Array,
                  chex.Array]:
     if not self._enabled:
       return self._predictor.loss_and_predictions(inputs, targets, forcings,  # pytype: disable=bad-return-type  # jax-ndarray

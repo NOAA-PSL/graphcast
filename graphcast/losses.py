@@ -52,6 +52,17 @@ class LossFunction(Protocol):
         batch before logging.
     """
 
+def stacked_mse(
+    predictions: chex.Array,
+    targets: chex.Array,
+    weights: chex.Array | None = None,
+) -> chex.Array:
+    """A very streamlined MSE loss function"""
+    loss = (prediction - targets)**2
+    if weights is not None:
+        loss *= weights
+    return loss.mean(axis=tuple(range(1, loss.ndim)))
+
 
 def weighted_mse_per_level(
     predictions: xarray.Dataset,

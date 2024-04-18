@@ -61,18 +61,14 @@ class StackedGraphCast(graphcast.GraphCast):
         self,
         inputs: chex.Array,
         targets: chex.Array,
-        ) -> tuple[predictor_base.LossAndDiagnostics, chex.Array]:
+        ) -> tuple[chex.Array, chex.Array]:
         # Forward pass
         predictions = self(inputs)
 
-        # bump to xarray.DataArray in order to hookup to losses module
-        dims = ("lat", "lon", "channels")
-
         # Compute loss
-        loss = losses.weighted_mse_per_level(
+        loss = losses.stacked_mse(
             predictions,
             targets,
-            per_variable_weights=dict(),
         )
         return loss, predictions
 
