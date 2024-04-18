@@ -29,10 +29,6 @@ class StackedGraphCast(graphcast.GraphCast):
     def __call__(
         self,
         inputs: chex.Array,
-        # I don't think we need anything else
-        targets_template: chex.Array = None,
-        forcings: chex.Array | None = None,
-        is_training: bool = False,
         ) -> chex.Array:
 
         self._maybe_init()
@@ -59,21 +55,18 @@ class StackedGraphCast(graphcast.GraphCast):
         # Conver output flat vectors for the grid nodes to the format of the output.
         # [num_grid_nodes, batch, output_size] ->
         # xarray (batch, one time step, lat, lon, level, multiple vars)
-        return self._grid_node_outputs_to_prediction(
-            output_grid_nodes, targets_template)
+        return self._grid_node_outputs_to_prediction(output_grid_nodes)
 
     def loss_and_predictions(
         self,
         inputs: chex.Array,
         targets: chex.Array,
-        forcings: chex.Array | None = None,
         ) -> tuple[predictor_base.LossAndDiagnostics, chex.Array]:
         # Forward pass
         predictions = self(inputs)
 
         # bump to xarray.DataArray in order to hookup to losses module
         dims = ("lat", "lon", "channels")
-
 
         # Compute loss
         loss = losses.weighted_mse_per_level(
@@ -109,7 +102,6 @@ class StackedGraphCast(graphcast.GraphCast):
     def _grid_node_outputs_to_prediction(
         self,
         grid_node_outputs: chex.Array,
-        targets_template: xarray.Dataset | None = None,
         ) -> chex.Array:
         """returned as [lat, lon, ...]"""
 
