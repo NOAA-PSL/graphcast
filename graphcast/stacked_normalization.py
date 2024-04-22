@@ -21,9 +21,9 @@ def normalize(values: chex.Array,
     """Normalize variables using the given scales and (optionally) locations."""
     result = values
     if locations is not None:
-        result -= locations#.astype(values.dtype)
+        result -= locations.astype(values.dtype)
 
-    result = result / scales#.astype(values.dtype)
+    result /= scales.astype(values.dtype)
     return result
 
 
@@ -70,17 +70,30 @@ class StackedInputsAndResiduals(stacked_predictor_base.StackedPredictor):
     def __init__(
         self,
         predictor: stacked_predictor_base.StackedPredictor,
-        stddev_by_level: chex.Array,
-        mean_by_level: chex.Array,
-        diffs_stddev_by_level: chex.Array,
+        stddev_by_level: dict[chex.Array, chex.Array],
+        mean_by_level: dict[chex.Array, chex.Array],
+        diffs_stddev_by_level: dict[chex.Array, chex.Array],
         last_input_channel_mapping: dict,
         ):
         self._predictor = predictor
         self._scales = stddev_by_level
         self._locations = mean_by_level
         self._residual_scales = diffs_stddev_by_level
-        self._residual_locations = None
+        self._residual_locations = {"inputs": None, "targets": None}
         self._last_input_channel_mapping = last_input_channel_mapping
+
+        self._checkit(self._scales)
+        self._checkit(self._locations)
+        self._checkit(self._residual_scales)
+
+    @staticmethod
+    def _checkit(attr):
+        if attr is not None:
+            assert isinstance(attr, dict)
+            assert "inputs" in attr.keys()
+            assert "targets" in attr.keys()
+            assert len(attr.keys()) == 2
+
 
     def _unnormalize_prediction_and_add_input(self, inputs, norm_prediction):
         """
@@ -90,7 +103,11 @@ class StackedInputsAndResiduals(stacked_predictor_base.StackedPredictor):
         """
 
         # grab the predictions that are also inputs, normalize these with residuals
-        prediction = unnormalize(norm_prediction, self._residual_scales, self._residual_locations)
+        prediction = unnormalize(
+            norm_prediction,
+            self._residual_scales["targets"],
+            self._residual_locations["targets"],
+        )
         last_input = inputs[..., list(self._last_input_channel_mapping.values())]
         prediction += last_input
         return prediction
@@ -98,14 +115,19 @@ class StackedInputsAndResiduals(stacked_predictor_base.StackedPredictor):
     def _subtract_input_and_normalize_target(self, inputs, target):
         last_input = inputs[..., list(self._last_input_channel_mapping.values())]
         target_residual = target - last_input
-        return normalize(target_residual, self._residual_scales, self._residual_locations)
+        result = normalize(
+            target_residual,
+            self._residual_scales["targets"],
+            self._residual_locations["targets"],
+        )
+        return result
 
     def __call__(
         self,
         inputs: chex.Array,
         **kwargs
         ) -> chex.Array:
-        norm_inputs = normalize(inputs, self._scales, self._locations)
+        norm_inputs = normalize(inputs, self._scales["inputs"], self._locations["inputs"])
         norm_predictions = self._predictor(norm_inputs, **kwargs)
         return self._unnormalize_prediction_and_add_input(inputs, norm_predictions)
 
@@ -116,7 +138,7 @@ class StackedInputsAndResiduals(stacked_predictor_base.StackedPredictor):
         **kwargs,
         ) -> chex.Array:
         """Returns the loss computed on normalized inputs and targets."""
-        norm_inputs = normalize(inputs, self._scales, self._locations)
+        norm_inputs = normalize(inputs, self._scales["inputs"], self._locations["inputs"])
         norm_target_residuals = self._subtract_input_and_normalize_target(inputs, targets)
         return self._predictor.loss(norm_inputs, norm_target_residuals, **kwargs)
 
@@ -127,7 +149,7 @@ class StackedInputsAndResiduals(stacked_predictor_base.StackedPredictor):
         **kwargs,
         ) -> Tuple[chex.Array, chex.Array]:
         """Returns the loss computed on normalized inputs and targets."""
-        norm_inputs = normalize(inputs, self._scales, self._locations)
+        norm_inputs = normalize(inputs, self._scales["inputs"], self._locations["inputs"])
         norm_target_residuals = self._subtract_input_and_normalize_target(inputs, targets)
         (loss, scalars), norm_predictions = self._predictor.loss_and_predictions(
             norm_inputs,
