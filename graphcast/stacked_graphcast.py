@@ -1,19 +1,21 @@
 
+
 import xarray
 import chex
 import jax.numpy as jnp
 import numpy as np
 
-from graphcast import graphcast
-from graphcast import predictor_base
+from graphcast.losses import stacked_mse
+from graphcast.stacked_predictor_base import StackedPredictor, StackedLossAndDiagnostics
+from graphcast.graphcast import GraphCast, ModelConfig, TaskConfig
 from graphcast import xarray_jax
 
-class StackedGraphCast(graphcast.GraphCast):
+class StackedGraphCast(GraphCast, StackedPredictor):
 
     def __init__(
         self,
-        model_config: graphcast.ModelConfig,
-        task_config: graphcast.TaskConfig
+        model_config: ModelConfig,
+        task_config: TaskConfig
         ):
         super().__init__(model_config=model_config, task_config=task_config)
 
@@ -61,16 +63,24 @@ class StackedGraphCast(graphcast.GraphCast):
         self,
         inputs: chex.Array,
         targets: chex.Array,
-        ) -> tuple[chex.Array, chex.Array]:
+        ) -> tuple[StackedLossAndDiagnostics, chex.Array]:
         # Forward pass
         predictions = self(inputs)
 
         # Compute loss
-        loss = losses.stacked_mse(
+        loss = stacked_mse(
             predictions,
             targets,
         )
         return loss, predictions
+
+    def loss(
+        self,
+        inputs: chex.Array,
+        targets: chex.Array,
+        ) -> StackedLossAndDiagnostics:
+        loss, _ = self.loss_and_predictions(inputs, targets)
+        return loss
 
 
     def _maybe_init(self):

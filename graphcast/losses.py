@@ -13,7 +13,7 @@
 # limitations under the License.
 """Loss functions (and terms for use in loss functions) used for weather."""
 
-from typing import Mapping
+from typing import Mapping, Optional
 
 import chex
 from graphcast import xarray_tree
@@ -22,7 +22,11 @@ from typing_extensions import Protocol
 import xarray
 
 
+# (total loss per sample, loss per variable per sample)
 LossAndDiagnostics = tuple[xarray.DataArray, xarray.Dataset]
+
+# (total loss per sample, loss per channel per sample)
+StackedLossAndDiagnostics = tuple[chex.Array, chex.Array]
 
 
 class LossFunction(Protocol):
@@ -56,13 +60,25 @@ class LossFunction(Protocol):
 def stacked_mse(
     predictions: chex.Array,
     targets: chex.Array,
-    weights: chex.Array | None = None,
-) -> chex.Array:
-    """A very streamlined MSE loss function"""
-    loss = (prediction - targets)**2
+    weights: Optional[chex.Array | None] = None,
+) -> StackedLossAndDiagnostics:
+    """A very streamlined MSE loss function
+    preserves final channel dimension
+
+    Returns:
+        loss_per_sample (chex.Array): total loss per sample within batch
+        loss_per_sample_channel (chex.Array): total loss per channel and per sample
+
+    """
+    loss = (predictions - targets)**2
     if weights is not None:
         loss *= weights
-    return loss.mean(axis=tuple(range(1, loss.ndim)))
+
+    # return mean over all except channel dimension
+    # recall prediction shape is (lat, lon, samples (batch), channels)
+    loss_per_sample_channel = loss.mean(axis=(0,1))
+    loss_per_sample = loss_per_sample_channel.mean(axis=-1)
+    return loss_per_sample, loss_per_sample_channel
 
 
 def weighted_mse_per_level(

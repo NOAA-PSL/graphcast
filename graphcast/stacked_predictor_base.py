@@ -1,21 +1,6 @@
-# Copyright 2023 DeepMind Technologies Limited.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#      http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS-IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-"""Abstract base classes for an xarray-based Predictor API."""
-
 import abc
 
-from typing import Tuple
+from typing import Tuple, Optional
 
 from graphcast import losses
 from graphcast import xarray_jax
@@ -23,7 +8,7 @@ import jax.numpy as jnp
 import xarray
 import chex
 
-LossAndDiagnostics = losses.LossAndDiagnostics
+StackedLossAndDiagnostics = losses.StackedLossAndDiagnostics
 
 
 class StackedPredictor(abc.ABC):
@@ -71,7 +56,7 @@ class StackedPredictor(abc.ABC):
            inputs: chex.Array,
            targets: chex.Array,
            **optional_kwargs,
-           ) -> LossAndDiagnostics:
+           ) -> StackedLossAndDiagnostics:
     """Computes a training loss, for predictors that are trainable.
 
     Why make this the Predictor's responsibility, rather than letting callers
@@ -114,7 +99,7 @@ class StackedPredictor(abc.ABC):
       inputs: chex.Array,
       targets: chex.Array,
       **optional_kwargs,
-      ) -> Tuple[LossAndDiagnostics, chex.Array]:
+      ) -> Tuple[StackedLossAndDiagnostics, chex.Array]:
     """Like .loss but also returns corresponding predictions.
 
     Implementing this is optional as it's not used directly by the Experiment,
