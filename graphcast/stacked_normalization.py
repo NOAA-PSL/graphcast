@@ -9,7 +9,7 @@ import logging
 import chex
 from typing import Optional, Tuple
 
-from graphcast import stacked_predictor_base
+from graphcast.stacked_predictor_base import StackedPredictor, StackedLossAndDiagnostics
 from graphcast import xarray_tree
 import xarray
 
@@ -39,7 +39,7 @@ def unnormalize(values: chex.Array,
     return result
 
 
-class StackedInputsAndResiduals(stacked_predictor_base.StackedPredictor):
+class StackedInputsAndResiduals(StackedPredictor):
     """Wraps with a residual connection, normalizing inputs and target residuals.
 
     The inner predictor is given inputs that are normalized using `locations`
@@ -69,7 +69,7 @@ class StackedInputsAndResiduals(stacked_predictor_base.StackedPredictor):
 
     def __init__(
         self,
-        predictor: stacked_predictor_base.StackedPredictor,
+        predictor: StackedPredictor,
         stddev_by_level: dict[chex.Array, chex.Array],
         mean_by_level: dict[chex.Array, chex.Array],
         diffs_stddev_by_level: dict[chex.Array, chex.Array],
@@ -136,7 +136,7 @@ class StackedInputsAndResiduals(stacked_predictor_base.StackedPredictor):
         inputs: chex.Array,
         targets: chex.Array,
         **kwargs,
-        ) -> chex.Array:
+        ) -> StackedLossAndDiagnostics:
         """Returns the loss computed on normalized inputs and targets."""
         norm_inputs = normalize(inputs, self._scales["inputs"], self._locations["inputs"])
         norm_target_residuals = self._subtract_input_and_normalize_target(inputs, targets)
@@ -147,7 +147,7 @@ class StackedInputsAndResiduals(stacked_predictor_base.StackedPredictor):
         inputs: chex.Array,
         targets: chex.Array,
         **kwargs,
-        ) -> Tuple[chex.Array, chex.Array]:
+        ) -> Tuple[StackedLossAndDiagnostics, chex.Array]:
         """Returns the loss computed on normalized inputs and targets."""
         norm_inputs = normalize(inputs, self._scales["inputs"], self._locations["inputs"])
         norm_target_residuals = self._subtract_input_and_normalize_target(inputs, targets)

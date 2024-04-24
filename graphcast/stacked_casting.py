@@ -17,7 +17,7 @@ import contextlib
 from typing import Any, Mapping, Tuple
 
 import chex
-from graphcast import stacked_predictor_base
+from graphcast.stacked_predictor_base import StackedPredictor, StackedLossAndDiagnostics
 import haiku as hk
 import jax
 import jax.numpy as jnp
@@ -32,7 +32,7 @@ PyTree = Any
 class StackedBfloat16Cast(Bfloat16Cast):
   """Wrapper that casts all inputs to bfloat16 and outputs to targets dtype."""
 
-  def __init__(self, predictor: stacked_predictor_base.StackedPredictor, enabled: bool = True):
+  def __init__(self, predictor: StackedPredictor, enabled: bool = True):
     """Inits the wrapper.
 
     Args:
@@ -67,7 +67,7 @@ class StackedBfloat16Cast(Bfloat16Cast):
            inputs: chex.Array,
            targets: chex.Array,
            **kwargs,
-           ) -> chex.Array:
+           ) -> StackedLossAndDiagnostics:
     if not self._enabled:
       return self._predictor.loss(inputs, targets, forcings, **kwargs)
 
@@ -92,7 +92,7 @@ class StackedBfloat16Cast(Bfloat16Cast):
       inputs: chex.Array,
       targets: chex.Array,
       **kwargs,
-      ) -> Tuple[chex.Array,
+      ) -> Tuple[StackedLossAndDiagnostics,
                  chex.Array]:
     if not self._enabled:
       return self._predictor.loss_and_predictions(inputs, targets, forcings,  # pytype: disable=bad-return-type  # jax-ndarray
