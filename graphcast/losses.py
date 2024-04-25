@@ -77,7 +77,7 @@ def stacked_mse(
     # return mean over all except channel dimension
     # recall prediction shape is (lat, lon, samples (batch), channels)
     loss_per_sample_channel = loss.mean(axis=(0,1))
-    loss_per_sample = loss_per_sample_channel.mean(axis=-1)
+    loss_per_sample = loss_per_sample_channel.sum(axis=-1)
     return loss_per_sample, loss_per_sample_channel
 
 
