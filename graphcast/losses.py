@@ -70,12 +70,21 @@ def stacked_mse(
         loss_per_sample_channel (chex.Array): total loss per channel and per sample
 
     """
+    # handle potential broadcasting to batch dimension
+    if predictions.ndim == 3:
+        latlon = (0, 1)
+    else:
+        latlon = (1, 2)
+        if weights is not None:
+            weights = weights[None] if weights.ndim == 3 else weights
+
+    # compute loss
     loss = (predictions - targets)**2
     if weights is not None:
         loss *= weights
 
-    # recall prediction shape is (lat, lon, samples (batch), channels)
-    loss_per_sample_channel = loss.mean(axis=(0,1))
+    # recall prediction shape is (samples (batch), lat, lon, channels)
+    loss_per_sample_channel = loss.mean(axis=latlon)
     loss_per_sample = loss_per_sample_channel.mean(axis=-1)
     return loss_per_sample, loss_per_sample_channel
 

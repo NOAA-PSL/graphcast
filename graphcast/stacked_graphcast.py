@@ -82,6 +82,7 @@ class StackedGraphCast(GraphCast, StackedPredictor):
         targets: chex.Array,
         weights: Optional[chex.Array | None] = None,
         ) -> StackedLossAndDiagnostics:
+
         (loss, diagnostics), _ = self.loss_and_predictions(inputs, targets, weights)
         return loss, diagnostics
 
@@ -101,10 +102,18 @@ class StackedGraphCast(GraphCast, StackedPredictor):
         self,
         inputs: chex.Array,
         ) -> chex.Array:
-        """inputs expected to be as [lat, lon, ...]"""
+        """inputs expected to be as [batch, lat, lon, channels] or [lat, lon, channels]
 
-        shape = (-1,) + inputs.shape[2:]
-        result = xarray_jax.unwrap(inputs)
+        Returns:
+            array with shape [latxlon, batch, channels]
+        """
+
+        # NOTE: to remove this, we would have to overwrite a lot of GraphCast "batch_second_axis" code
+        inputs = inputs[None] if inputs.ndim == 3 else inputs
+        result = np.moveaxis(inputs, 0, 2)
+
+        shape = (-1,) + result.shape[2:]
+        result = xarray_jax.unwrap(result)
         result = result.reshape(shape)
         return result
 
@@ -112,13 +121,16 @@ class StackedGraphCast(GraphCast, StackedPredictor):
         self,
         grid_node_outputs: chex.Array,
         ) -> chex.Array:
-        """returned as [lat, lon, ...]"""
+        """returned as [batch, lat, lon, channels]"""
 
         assert self._grid_lat is not None and self._grid_lon is not None
         grid_shape = (self._grid_lat.shape[0], self._grid_lon.shape[0])
 
-        # result is [lat, lon, batch, channels]
+        # produces [lat, lon, batch, channels]
         result = grid_node_outputs.reshape(
             grid_shape + grid_node_outputs.shape[1:],
         )
+        # get batch dimension first again
+        result = np.moveaxis(result, 2, 0)
+        result = result.squeeze()
         return result
