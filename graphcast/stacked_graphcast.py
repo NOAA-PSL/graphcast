@@ -113,7 +113,6 @@ class StackedGraphCast(GraphCast, StackedPredictor):
         result = np.moveaxis(inputs, 0, 2)
 
         shape = (-1,) + result.shape[2:]
-        result = xarray_jax.unwrap(result)
         result = result.reshape(shape)
         return result
 
