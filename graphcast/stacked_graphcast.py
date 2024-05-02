@@ -120,7 +120,7 @@ class StackedGraphCast(GraphCast, StackedPredictor):
         self,
         grid_node_outputs: chex.Array,
         ) -> chex.Array:
-        """returned as [batch, lat, lon, channels]"""
+        """returned as [batch, lat, lon, channels] or [lat, lon, channels]"""
 
         assert self._grid_lat is not None and self._grid_lon is not None
         grid_shape = (self._grid_lat.shape[0], self._grid_lon.shape[0])
