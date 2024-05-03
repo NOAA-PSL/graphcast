@@ -144,6 +144,6 @@ def _inputs_targets_weights_to_bfloat16(
                chex.Array]:
 
     i16 = inputs.astype(jnp.bfloat16)
-    t16 = jax.tree.map(lambda x: x.astype(jnp.bfloat16), targets)
+    t16 = jax.tree_util.tree_map(lambda x: x.astype(jnp.bfloat16), targets)
     w16 = weights.astype(jnp.bfloat16) if weights is not None else None
     return i16, t16, w16
