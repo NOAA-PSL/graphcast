@@ -325,6 +325,7 @@ def extract_inputs_targets_forcings(
     pressure_levels: Tuple[int, ...],
     input_duration: TimedeltaLike,
     target_lead_times: TargetLeadTimes,
+    drop_datetime: bool=True,
     ) -> Tuple[xarray.Dataset, xarray.Dataset, xarray.Dataset]:
   """Extracts inputs, targets and forcings according to requirements."""
   dataset = dataset.sel(level=list(pressure_levels))
@@ -338,7 +339,8 @@ def extract_inputs_targets_forcings(
     add_tisr_var(dataset)
 
   # `datetime` is needed by add_derived_vars but breaks autoregressive rollouts.
-  dataset = dataset.drop_vars("datetime")
+  if drop_datetime:
+    dataset = dataset.drop_vars("datetime")
 
   inputs, targets = extract_input_target_times(
       dataset,
