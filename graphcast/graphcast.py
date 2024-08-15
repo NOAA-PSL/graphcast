@@ -161,7 +161,7 @@ class TaskConfig:
   # Target variables which the model is expected to predict.
   target_variables: tuple[str, ...]
   forcing_variables: tuple[str, ...]
-  pressure_levels: tuple[int, ...]
+  pressure_levels: tuple[float, ...]
   input_duration: str
   longitude: Optional[tuple[float, ...] | None] = None
   latitude: Optional[tuple[float, ...] | None] = None
