@@ -178,7 +178,7 @@ def add_derived_vars(data: xarray.Dataset) -> None:
     )
 
 
-def add_tisr_var(data: xarray.Dataset) -> None:
+def add_tisr_var(data: xarray.Dataset, **kwargs) -> None:
   """Adds TISR feature to `data` in place if missing.
 
   Args:
@@ -199,8 +199,11 @@ def add_tisr_var(data: xarray.Dataset) -> None:
   # the `batch` dimension exists and has size greater than one.
   data_no_batch = data.squeeze("batch") if "batch" in data.dims else data
 
+  if "use_jit" not in kwargs:
+    kwargs["use_jit"] = True
   tisr = solar_radiation.get_toa_incident_solar_radiation_for_xarray(
-      data_no_batch, use_jit=True
+      data_no_batch,
+      **kwargs,
   )
 
   if "batch" in data.dims:
@@ -326,8 +329,13 @@ def extract_inputs_targets_forcings(
     input_duration: TimedeltaLike,
     target_lead_times: TargetLeadTimes,
     drop_datetime: bool=True,
+    **tisr_kwargs,
     ) -> Tuple[xarray.Dataset, xarray.Dataset, xarray.Dataset]:
-  """Extracts inputs, targets and forcings according to requirements."""
+  """Extracts inputs, targets and forcings according to requirements.
+
+  Additional arguments passed to
+  graphcast.solar_radiation.get_toa_incident_solar_radiation_for_xarray
+  """
   dataset = dataset.sel(level=list(pressure_levels))
 
   # "Forcings" include derived variables that do not exist in the original ERA5
@@ -336,7 +344,7 @@ def extract_inputs_targets_forcings(
   if set(forcing_variables) & _DERIVED_VARS:
     add_derived_vars(dataset)
   if set(forcing_variables) & {TISR}:
-    add_tisr_var(dataset)
+    add_tisr_var(dataset, **tisr_kwargs)
 
   # `datetime` is needed by add_derived_vars but breaks autoregressive rollouts.
   if drop_datetime:
