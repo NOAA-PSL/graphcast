@@ -62,10 +62,31 @@ PRESSURE_LEVELS_HRES_25 = (
 PRESSURE_LEVELS_WEATHERBENCH_13 = (
     50, 100, 150, 200, 250, 300, 400, 500, 600, 700, 850, 925, 1000)
 
+OCN_VERT_LEVELS_MOM6_75 = (
+    0.5154038, 1.571288, 2.686875, 3.880151, 5.170009,
+    6.579737, 8.137705, 9.877925, 11.84029, 14.07027,
+    16.61787, 19.53563, 22.87583, 26.68719, 31.01190,
+    35.88374, 41.32803, 47.36361, 54.00650, 61.27450,
+    69.19184, 77.79336, 87.12783, 97.26059, 108.2755,
+    120.2765, 133.3895, 147.7632, 163.5713, 181.0136,
+    200.3178, 221.7407, 245.5697, 272.1227, 301.7486,
+    334.8254, 371.7584, 412.9755, 458.9213, 510.0494,
+    566.8126, 629.6508, 698.9779, 775.1686, 858.5435,
+    949.3572, 1047.787, 1153.924, 1267.772, 1389.245,
+    1518.168, 1654.293, 1797.302, 1946.823, 2102.443,
+    2263.724, 2430.213, 2601.456, 2777.007, 2956.436,
+    3139.335, 3325.323, 3514.048, 3705.185, 3898.445,
+    4093.563, 4290.305, 4488.461, 4687.847, 4888.300,
+    5089.678, 5291.855, 5494.724, 5698.189, 5902.058)
+
 PRESSURE_LEVELS = {
     13: PRESSURE_LEVELS_WEATHERBENCH_13,
     25: PRESSURE_LEVELS_HRES_25,
     37: PRESSURE_LEVELS_ERA5_37,
+}
+
+OCN_VERT_LEVELS = {
+    75: OCN_VERT_LEVELS_MOM6_75
 }
 
 # The list of all possible atmospheric variables. Taken from:
@@ -108,7 +129,15 @@ UFS_ATMOSPHERIC_VARS = (
     "vgrd",         # Meridional Wind
 )
 
-ALL_ATMOSPHERIC_VARS = ECMWF_ATMOSPHERIC_VARS + UFS_ATMOSPHERIC_VARS
+MOM6_OCEAN_VARS = (
+    "ho",           # layer thicknesses after ALE regridding and remapping
+    "so",           # Sea Water Salinity
+    "temp",         # Potential Temperature
+    "uo",           # Sea Water X Velocity
+    "vo",           # Sea Water Y Velocity
+        )
+ALL_ATMOSPHERIC_VARS = ECMWF_ATMOSPHERIC_VARS + UFS_ATMOSPHERIC_VARS 
+ALL_OCEAN_VARS = MOM6_OCEAN_VARS
 
 TARGET_SURFACE_VARS = (
     "2m_temperature",
@@ -163,6 +192,7 @@ class TaskConfig:
   forcing_variables: tuple[str, ...]
   pressure_levels: tuple[int, ...]
   input_duration: str
+  ocn_vert_levels: tuple[int, ...] = None
   longitude: Optional[tuple[float, ...] | None] = None
   latitude: Optional[tuple[float, ...] | None] = None
 
@@ -317,11 +347,15 @@ class GraphCast(predictor_base.Predictor):
     )
 
     num_surface_vars = len(
-        set(task_config.target_variables) - set(ALL_ATMOSPHERIC_VARS))
+        set(task_config.target_variables) - set(ALL_ATMOSPHERIC_VARS) - set(
+            ALL_OCEAN_VARS))
     num_atmospheric_vars = len(
         set(task_config.target_variables) & set(ALL_ATMOSPHERIC_VARS))
+    num_ocean_vars = len(
+        set(task_config.target_variables) & set(ALL_OCEAN_VARS))
     num_outputs = (num_surface_vars +
-                   len(task_config.pressure_levels) * num_atmospheric_vars)
+                   len(task_config.pressure_levels) * num_atmospheric_vars +
+                   len(task_config.ocn_vert_levels) * num_ocean_vars)
 
     # Decoder, which moves data from the mesh back into the grid with a single
     # message passing step.
@@ -416,39 +450,89 @@ class GraphCast(predictor_base.Predictor):
       inputs: xarray.Dataset,
       targets: xarray.Dataset,
       forcings: xarray.Dataset,
+      weights: xarray.Dataset,
       ) -> tuple[predictor_base.LossAndDiagnostics, xarray.Dataset]:
     # Forward pass.
     predictions = self(
         inputs, targets_template=targets, forcings=forcings, is_training=True)
-    # Compute loss.
+    
+    # Artificially zero out masked areas for ocean, sea ice and land variables
+    for var in predictions:
+        if "landsea_mask" in inputs:
+            if "z_l" in predictions[var].dims:
+                predictions[var] = predictions[var]*inputs["landsea_mask"]
 
+            elif var.lower() == "SSH".lower():
+                predictions[var] = predictions[var]*inputs["landsea_mask"].isel(z_l=0)
+
+            elif var.lower() == "land".lower():
+                print("Rounding off land values to the nearest integer")
+                predictions[var]= predictions[var].round()
+
+            elif var.startswith("ice"):
+                if "land" in predictions:
+                    mask = predictions["land"].round()
+                    icemask = xarray.where(mask==2, 1, 0) # ice=2 in the mask
+                    predictions[var] = predictions[var]*icemask
+                else:
+                    predictions[var] = predictions[var]*inputs["landsea_mask"]
+
+            elif var.startswith("soil"):
+                if "land" in predictions:
+                    mask = predictions["land"].round()
+                    landmask = xarray.where(mask==1, 1, 0) # land=1 in the mask
+                    predictions[var] = predictions[var]*landmask
+                # Below is supposed to work, but the static landsea mask omits a few land 
+                # locations and treats them as ocean. This leads to huge errors in the soilm
+                # which has significantly high values in those locations. It is therefore wiser
+                # to not exclude anything at all rather than excluding a few but important locs.  
+                #else:
+                #    landmask = 1 - inputs["landsea_mask"].isel(z_l=0)
+                #    predictions[var] = predictions[var]*landmask
+    
+    # Compute loss.
     t2m = "2m_temperature" if "2m_temperature" in targets else "tmp2m"
     u10m = "10m_u_component_of_wind" if "10m_u_component_of_wind" in targets else "ugrd10m"
     v10m = "10m_v_component_of_wind" if "10m_v_component_of_wind" in targets else "vgrd10m"
     psfc = "mean_sea_level_pressure" if "mean_sea_level_pressure" in targets else "pressfc"
     precip = "total_precipitation_6hr" if "total_precipitation_6hr" in targets else "prateb_ave"
+    ssh = "SSH"
+
     per_variable_weights = {
         # Any variables not specified here are weighted as 1.0.
         # A single-level variable, but an important headline variable
         # and also one which we have struggled to get good performance
         # on at short lead times, so leaving it weighted at 1.0, equal
         # to the multi-level variables:
+        # Note: These should be treated as default values for the target 
+        # variables. The 'weight' input contains the user defined values.
         t2m: 1.0,
-        # New single-level variables, which we don't weight too highly
+        "icec": 1.0,
+
+        # New single-level variables, which we don't weigh too highly
         # to avoid hurting performance on other variables.
         u10m: 0.1,
         v10m: 0.1,
         psfc: 0.1,
         precip: 0.1,
+        ssh: 0.1,
+        "icetk": 0.1,
+        "soilm": 0.1,
     }
-    for key in [t2m, u10m, v10m, psfc, precip]:
-        if key not in targets:
-            val = per_variable_weights.pop(key)
-            #warnings.warn(f"Could not find {key} in targets dataset, will not add variable specific loss weighting of {val}")
+    for key in [t2m, "icec", u10m, v10m, psfc, precip, ssh, "icetk", "soilm"]:
+        if key not in weights and key in targets:
+            # set the default weight 
+            weights.update(key=per_variable_weights[key])
+        
+        if key not in targets and key in weights:
+            val = weights.pop(key)
+            warnings.warn(f"Could not find {key} in targets dataset, will not add variable specific loss weighting of {val}")
 
     loss = losses.weighted_mse_per_level(
         predictions, targets,
-        per_variable_weights=per_variable_weights
+        per_variable_weights=weights,
+        landsea_mask=inputs["landsea_mask"] if "landsea_mask" in inputs else None,
+        land = inputs["land"] if "land" in inputs else None,
     )
     return loss, predictions  # pytype: disable=bad-return-type  # jax-ndarray
 
@@ -457,8 +541,9 @@ class GraphCast(predictor_base.Predictor):
       inputs: xarray.Dataset,
       targets: xarray.Dataset,
       forcings: xarray.Dataset,
+      weights: xarray.Dataset,
       ) -> predictor_base.LossAndDiagnostics:
-    loss, _ = self.loss_and_predictions(inputs, targets, forcings)
+    loss, _ = self.loss_and_predictions(inputs, targets, forcings, weights)
     return loss  # pytype: disable=bad-return-type  # jax-ndarray
 
   def _maybe_init(self, sample_inputs: xarray.Dataset):

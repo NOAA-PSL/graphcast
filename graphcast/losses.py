@@ -93,13 +93,44 @@ def weighted_mse_per_level(
     predictions: xarray.Dataset,
     targets: xarray.Dataset,
     per_variable_weights: Mapping[str, float],
+    landsea_mask: Optional[xarray.DataArray | None] = None,
+    land: Optional[xarray.Dataset | None] = None, 
 ) -> LossAndDiagnostics:
   """Latitude- and pressure-level-weighted MSE loss."""
+
   def loss(prediction, target):
+    # Mask values as required
+    #if 'z_l' in prediction.dims:
+    #    prediction = prediction*landsea_mask
+    #    target = target*landsea_mask
+
+    #elif prediction.name.lower() == 'SSH'.lower():
+    #    mask = predictions["land"].round()
+    #    ocn_sfc_mask = xarray.where(mask==0, 1, 0) # ice=2 in the mask
+    #    prediction = prediction*ocn_sfc_mask
+    #    target = target*ocn_sfc_mask
+
+    #if prediction.name.lower() == 'land'.lower():
+    #    print('Rounding off land values to the nearest integer')
+    #    prediction = prediction.round()
+
+    #elif prediction.name.startswith('ice'):
+    #    mask = predictions["land"].round()
+    #    icemask = xarray.where(mask==2, 1, 0) # ice=2 in the mask
+    #    prediction = prediction*icemask
+    #    target = target*icemask
+
+    #elif prediction.name.startswith('soil'):
+    #    landmask = 1 - landsea_mask
+    #    prediction = prediction*landmask
+    #    target = target*landmask
+
     loss = (prediction - target)**2
     loss *= normalized_latitude_weights(target).astype(loss.dtype)
     if 'level' in target.dims:
       loss *= normalized_level_weights(target).astype(loss.dtype)
+    elif 'z_l' in target.dims:
+      loss *= normalized_ocn_level_weights(target).astype(loss.dtype)
     return _mean_preserving_batch(loss)
 
   losses = xarray_tree.map_structure(loss, predictions, targets)
@@ -107,7 +138,7 @@ def weighted_mse_per_level(
 
 
 def _mean_preserving_batch(x: xarray.DataArray) -> xarray.DataArray:
-  return x.mean([d for d in x.dims if d != 'batch'], skipna=False)
+  return x.mean([d for d in x.dims if d != 'batch'], skipna=True)
 
 
 def sum_per_variable_losses(
@@ -126,15 +157,27 @@ def sum_per_variable_losses(
   }
   total = xarray.concat(
       weighted_per_variable_losses.values(), dim='variable', join='exact').sum(
-          'variable', skipna=False)
+          'variable', skipna=True)
   return total, per_variable_losses  # pytype: disable=bad-return-type
 
 
 def normalized_level_weights(data: xarray.DataArray) -> xarray.DataArray:
   """Weights proportional to pressure at each level."""
   level = data.coords['level']
-  return level / level.mean(skipna=False)
+  #print('Normalized atmosphere level weights:', level / level.mean(skipna=True))
+  return level / level.mean(skipna=True)
 
+def normalized_ocn_level_weights(data: xarray.DataArray) -> xarray.DataArray:
+  """Weights inversely proportional to the layer depth (relative to surface) 
+  at each level."""
+  z_l = data.coords['z_l']
+  # compute harmonic mean of the layer depth to provide higher weights 
+  # near surface
+  z_l_rec = 1./z_l
+  harmean = 1./z_l_rec.mean(skipna=True)
+  weights = z_l_rec/harmean
+  #print('Normalized ocean level weights:', weights)
+  return weights
 
 def normalized_latitude_weights(data: xarray.DataArray) -> xarray.DataArray:
   """Weights based on latitude, roughly proportional to grid cell area.
@@ -193,7 +236,7 @@ def normalized_latitude_weights(data: xarray.DataArray) -> xarray.DataArray:
     except ValueError:
       weights = _unequal_weight_for_latitude_vector_without_poles(latitude)
 
-  return weights / weights.mean(skipna=False)
+  return weights / weights.mean(skipna=True)
 
 
 def _unequal_weight_for_latitude_vector_without_poles(latitude):

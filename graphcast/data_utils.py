@@ -357,3 +357,47 @@ def extract_inputs_targets_forcings(
   targets = targets[list(target_variables)]
 
   return inputs, targets, forcings
+
+def extract_inputs_targets_forcings_coupled(
+    dataset: xarray.Dataset,
+    *,
+    input_variables: Tuple[str, ...],
+    target_variables: Tuple[str, ...],
+    forcing_variables: Tuple[str, ...],
+    pressure_levels: Tuple[int, ...],
+    ocn_vert_levels: Tuple[int, ...],
+    input_duration: TimedeltaLike,
+    target_lead_times: TargetLeadTimes,
+    ) -> Tuple[xarray.Dataset, xarray.Dataset, xarray.Dataset]:
+  """Extracts inputs, targets and forcings according to requirements."""
+  dataset = dataset.sel(level=list(pressure_levels), z_l=list(ocn_vert_levels))
+
+  # "Forcings" include derived variables that do not exist in the original ERA5
+  # or HRES datasets, as well as other variables (e.g. tisr) that need to be
+  # computed manually for the target lead times. Compute the requested ones.
+  if set(forcing_variables) & _DERIVED_VARS:
+    add_derived_vars(dataset)
+  
+  if set(forcing_variables) & {TISR}:
+    add_tisr_var(dataset)
+
+  # `datetime` is needed by add_derived_vars but breaks autoregressive rollouts.
+  dataset = dataset.drop_vars("datetime")
+
+  inputs, targets = extract_input_target_times(
+      dataset,
+      input_duration=input_duration,
+      target_lead_times=target_lead_times)
+
+  if set(forcing_variables) & set(target_variables):
+    raise ValueError(
+        f"Forcing variables {forcing_variables} should not "
+        f"overlap with target variables {target_variables}."
+    )
+
+  inputs = inputs[list(input_variables)]
+  # The forcing uses the same time coordinates as the target.
+  forcings = targets[list(forcing_variables)]
+  targets = targets[list(target_variables)]
+
+  return inputs, targets, forcings

@@ -177,14 +177,12 @@ class Predictor(predictor_base.Predictor):
       flat_forcings = scan_variables
       forcings = _unflatten_and_expand_time(flat_forcings, forcings_treedef,
                                             target_template.coords['time'])
-
       # Add constant inputs:
       all_inputs = xarray.merge([constant_inputs, inputs])
       predictions: xarray.Dataset = self._predictor(
           all_inputs, target_template,
           forcings=forcings,
           **kwargs)
-
       next_frame = xarray.merge([predictions, forcings])
       next_inputs = self._update_inputs(inputs, next_frame)
 
@@ -210,7 +208,6 @@ class Predictor(predictor_base.Predictor):
 
     # Loop (without unroll) with hk states in cell (jax.lax.scan won't do).
     _, flat_preds = hk.scan(one_step_prediction, inputs, scan_variables)
-
     # The result of scan will have an extra leading axis on all arrays,
     # corresponding to the target times in this case. We need to be prepared for
     # it when unflattening the arrays back into a Dataset:
@@ -225,6 +222,7 @@ class Predictor(predictor_base.Predictor):
            inputs: xarray.Dataset,
            targets: xarray.Dataset,
            forcings: xarray.Dataset,
+           weights: xarray.Dataset,
            **kwargs
            ) -> predictor_base.LossAndDiagnostics:
     """The mean of the per-timestep losses of the underlying predictor."""
@@ -233,7 +231,7 @@ class Predictor(predictor_base.Predictor):
       # autoregressive feedback and can delegate the loss directly to the
       # underlying single-step predictor. This means the underlying predictor
       # doesn't need to implement .loss_and_predictions.
-      return self._predictor.loss(inputs, targets, forcings, **kwargs)
+      return self._predictor.loss(inputs, targets, forcings, weights, **kwargs)
 
     constant_inputs = self._get_and_validate_constant_inputs(
         inputs, targets, forcings)
@@ -274,6 +272,7 @@ class Predictor(predictor_base.Predictor):
           all_inputs,
           target,
           forcings=forcings,
+          weights=weights,
           **kwargs)
 
       # Unwrap to jax arrays shape (batch,):

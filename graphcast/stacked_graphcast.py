@@ -36,7 +36,7 @@ class StackedGraphCast(GraphCast, StackedPredictor):
         self._maybe_init()
 
         # Convert all input data into flat vectors for each of the grid nodes.
-        # xarray (batch, time, lat, lon, level, multiple vars, forcings)
+        # xarray (batch, time, lat, lon, level, z_l, multiple vars, forcings)
         # -> [num_grid_nodes, batch, num_channels]
         grid_node_features = self._inputs_to_grid_node_features(inputs)
 
