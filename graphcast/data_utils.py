@@ -401,13 +401,12 @@ def extract_inputs_targets_forcings_coupled(
   # `datetime` is needed by add_derived_vars but breaks autoregressive rollouts.
   if drop_datetime:
       dataset = dataset.drop_vars("datetime")
-  print('dataset after dropping datetime:', dataset)
   
   inputs, targets = extract_input_target_times(
       dataset,
       input_duration=input_duration,
       target_lead_times=target_lead_times)
-  print('Inputs, Targets', inputs, targets)
+  
   if set(forcing_variables) & set(target_variables):
     raise ValueError(
         f"Forcing variables {forcing_variables} should not "
