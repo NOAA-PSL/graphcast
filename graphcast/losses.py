@@ -99,32 +99,6 @@ def weighted_mse_per_level(
   """Latitude- and pressure-level-weighted MSE loss."""
 
   def loss(prediction, target):
-    # Mask values as required
-    #if 'z_l' in prediction.dims:
-    #    prediction = prediction*landsea_mask
-    #    target = target*landsea_mask
-
-    #elif prediction.name.lower() == 'SSH'.lower():
-    #    mask = predictions["land"].round()
-    #    ocn_sfc_mask = xarray.where(mask==0, 1, 0) # ice=2 in the mask
-    #    prediction = prediction*ocn_sfc_mask
-    #    target = target*ocn_sfc_mask
-
-    #if prediction.name.lower() == 'land'.lower():
-    #    print('Rounding off land values to the nearest integer')
-    #    prediction = prediction.round()
-
-    #elif prediction.name.startswith('ice'):
-    #    mask = predictions["land"].round()
-    #    icemask = xarray.where(mask==2, 1, 0) # ice=2 in the mask
-    #    prediction = prediction*icemask
-    #    target = target*icemask
-
-    #elif prediction.name.startswith('soil'):
-    #    landmask = 1 - landsea_mask
-    #    prediction = prediction*landmask
-    #    target = target*landmask
-
     loss = (prediction - target)**2
     loss *= normalized_latitude_weights(target).astype(loss.dtype)
     if 'level' in target.dims:
