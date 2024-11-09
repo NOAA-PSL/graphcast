@@ -159,7 +159,7 @@ def restore_leading_axes(grid_xarray: xarray.DataArray) -> xarray.DataArray:
 
   input_dims = list(grid_xarray.dims)
   output_dims = list(input_dims)
-  for leading_key in ["level", "time", "batch"]:  # reverse order for insert
+  for leading_key in ["level", "z_l", "time", "batch"]:  # reverse order for insert
     if leading_key in input_dims:
       output_dims.remove(leading_key)
       output_dims.insert(0, leading_key)

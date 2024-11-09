@@ -163,6 +163,7 @@ class InputsAndResiduals(predictor_base.Predictor):
            inputs: xarray.Dataset,
            targets: xarray.Dataset,
            forcings: xarray.Dataset,
+           weights: xarray.Dataset,
            **kwargs,
            ) -> predictor_base.LossAndDiagnostics:
     """Returns the loss computed on normalized inputs and targets."""
@@ -172,7 +173,7 @@ class InputsAndResiduals(predictor_base.Predictor):
         lambda t: self._subtract_input_and_normalize_target(inputs, t),
         targets)
     return self._predictor.loss(
-        norm_inputs, norm_target_residuals, forcings=norm_forcings, **kwargs)
+        norm_inputs, norm_target_residuals, forcings=norm_forcings, weights=weights, **kwargs)
 
   def loss_and_predictions(  # pytype: disable=signature-mismatch  # jax-ndarray
       self,

@@ -13,15 +13,20 @@
 # limitations under the License.
 """Loss functions (and terms for use in loss functions) used for weather."""
 
-from typing import Mapping
+from typing import Mapping, Optional
 
+import chex
 from graphcast import xarray_tree
 import numpy as np
 from typing_extensions import Protocol
 import xarray
 
 
+# (total loss per sample, loss per variable per sample)
 LossAndDiagnostics = tuple[xarray.DataArray, xarray.Dataset]
+
+# (total loss per sample, loss per channel per sample)
+StackedLossAndDiagnostics = tuple[chex.Array, chex.Array]
 
 
 class LossFunction(Protocol):
@@ -52,18 +57,54 @@ class LossFunction(Protocol):
         batch before logging.
     """
 
+def stacked_mse(
+    predictions: chex.Array,
+    targets: chex.Array,
+    weights: Optional[chex.Array | None] = None,
+) -> StackedLossAndDiagnostics:
+    """A very streamlined MSE loss function
+    preserves final channel dimension
+
+    Returns:
+        loss_per_sample (chex.Array): total loss per sample within batch
+        loss_per_sample_channel (chex.Array): total loss per channel and per sample
+
+    """
+    # handle potential broadcasting to batch dimension
+    if predictions.ndim == 3:
+        latlon = (0, 1)
+    else:
+        latlon = (1, 2)
+        if weights is not None:
+            weights = weights[None] if weights.ndim == 3 else weights
+
+    # compute loss
+    loss = (predictions - targets)**2
+    if weights is not None:
+        loss *= weights
+
+    # recall prediction shape is (samples (batch), lat, lon, channels)
+    loss_per_sample_channel = loss.sum(axis=latlon)
+    loss_per_sample = loss_per_sample_channel.sum(axis=-1)
+    return loss_per_sample, loss_per_sample_channel
+
 
 def weighted_mse_per_level(
     predictions: xarray.Dataset,
     targets: xarray.Dataset,
     per_variable_weights: Mapping[str, float],
+    landsea_mask: Optional[xarray.DataArray | None] = None,
+    land: Optional[xarray.Dataset | None] = None, 
 ) -> LossAndDiagnostics:
   """Latitude- and pressure-level-weighted MSE loss."""
+
   def loss(prediction, target):
     loss = (prediction - target)**2
     loss *= normalized_latitude_weights(target).astype(loss.dtype)
     if 'level' in target.dims:
       loss *= normalized_level_weights(target).astype(loss.dtype)
+    elif 'z_l' in target.dims:
+      loss *= normalized_ocn_level_weights(target).astype(loss.dtype)
     return _mean_preserving_batch(loss)
 
   losses = xarray_tree.map_structure(loss, predictions, targets)
@@ -71,7 +112,7 @@ def weighted_mse_per_level(
 
 
 def _mean_preserving_batch(x: xarray.DataArray) -> xarray.DataArray:
-  return x.mean([d for d in x.dims if d != 'batch'], skipna=False)
+  return x.mean([d for d in x.dims if d != 'batch'], skipna=True)
 
 
 def sum_per_variable_losses(
@@ -90,15 +131,27 @@ def sum_per_variable_losses(
   }
   total = xarray.concat(
       weighted_per_variable_losses.values(), dim='variable', join='exact').sum(
-          'variable', skipna=False)
+          'variable', skipna=True)
   return total, per_variable_losses  # pytype: disable=bad-return-type
 
 
 def normalized_level_weights(data: xarray.DataArray) -> xarray.DataArray:
   """Weights proportional to pressure at each level."""
   level = data.coords['level']
-  return level / level.mean(skipna=False)
+  #print('Normalized atmosphere level weights:', level / level.mean(skipna=True))
+  return level / level.mean(skipna=True)
 
+def normalized_ocn_level_weights(data: xarray.DataArray) -> xarray.DataArray:
+  """Weights inversely proportional to the layer depth (relative to surface) 
+  at each level."""
+  z_l = data.coords['z_l']
+  # compute harmonic mean of the layer depth to provide higher weights 
+  # near surface
+  z_l_rec = 1./z_l
+  harmean = 1./z_l_rec.mean(skipna=True)
+  weights = z_l_rec/harmean
+  #print('Normalized ocean level weights:', weights)
+  return weights
 
 def normalized_latitude_weights(data: xarray.DataArray) -> xarray.DataArray:
   """Weights based on latitude, roughly proportional to grid cell area.
@@ -132,6 +185,15 @@ def normalized_latitude_weights(data: xarray.DataArray) -> xarray.DataArray:
     the proportion of area covered by each of the nearest non-pole point, and we
     test for this in the test.
 
+  For a nonuniform grid
+    1. assume latitude (length N) is at cell center
+    2. compute what would be the "cell bounds" (length N+1)
+
+           | --- x --- |
+      (left)  (center) (right)
+
+    3. compute the difference, this is delta_latitude (length N)
+
   Args:
     data: `DataArray` with latitude coordinates.
   Returns:
@@ -142,9 +204,28 @@ def normalized_latitude_weights(data: xarray.DataArray) -> xarray.DataArray:
   if np.any(np.isclose(np.abs(latitude), 90.)):
     weights = _weight_for_latitude_vector_with_poles(latitude)
   else:
-    weights = _weight_for_latitude_vector_without_poles(latitude)
+    try:
+      _check_uniform_spacing_and_get_delta(latitude)
+      weights = _weight_for_latitude_vector_without_poles(latitude)
+    except ValueError:
+      weights = _unequal_weight_for_latitude_vector_without_poles(latitude)
 
-  return weights / weights.mean(skipna=False)
+  return weights / weights.mean(skipna=True)
+
+
+def _unequal_weight_for_latitude_vector_without_poles(latitude):
+  """Weights for non-uniform latitudes"""
+  delta_latitude_c = np.deg2rad(latitude).diff('lat').values
+  boundaries = np.deg2rad(latitude).values[:-1] + delta_latitude_c/2
+  left = [np.deg2rad( 90)] if latitude[0] > 0 else [np.deg2rad(-90)]
+  right= [np.deg2rad(-90)] if latitude[0] > 0 else [np.deg2rad( 90)]
+  boundaries = np.concatenate([left, boundaries, right])
+  delta_latitude = xarray.DataArray(
+    np.abs(np.sin(boundaries[:-1]) - np.sin(boundaries[1:])),
+    coords=latitude.coords,
+    dims=latitude.dims,
+  )
+  return delta_latitude
 
 
 def _weight_for_latitude_vector_without_poles(latitude):
