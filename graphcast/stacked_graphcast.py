@@ -107,8 +107,7 @@ class StackedGraphCast(GraphCast, StackedPredictor):
         Returns:
             array with shape [latxlon, batch, channels]
         """
-
-        # NOTE: to remove this, we would have to overwrite a lot of GraphCast "batch_second_axis" code
+        # add a batch dimension if it's not already there
         inputs = inputs[None] if inputs.ndim == 3 else inputs
         result = np.moveaxis(inputs, 0, 2)
 
@@ -120,7 +119,7 @@ class StackedGraphCast(GraphCast, StackedPredictor):
         self,
         grid_node_outputs: chex.Array,
         ) -> chex.Array:
-        """returned as [batch, lat, lon, channels] or [lat, lon, channels]"""
+        """returned as [batch, lat, lon, channels]"""
 
         assert self._grid_lat is not None and self._grid_lon is not None
         grid_shape = (self._grid_lat.shape[0], self._grid_lon.shape[0])
@@ -131,5 +130,4 @@ class StackedGraphCast(GraphCast, StackedPredictor):
         )
         # get batch dimension first again
         result = np.moveaxis(result, 2, 0)
-        result = result.squeeze()
         return result
