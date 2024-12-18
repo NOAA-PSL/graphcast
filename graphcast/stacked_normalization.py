@@ -9,7 +9,7 @@ import logging
 import chex
 from typing import Optional, Tuple
 
-from graphcast.stacked_predictor_base import StackedPredictor, StackedLossAndDiagnostics
+from graphcast.stacked_predictor_base import StackedPredictor, StackedLossAndChannelLoss
 from graphcast import xarray_tree
 import xarray
 
@@ -136,7 +136,7 @@ class StackedInputsAndResiduals(StackedPredictor):
         inputs: chex.Array,
         targets: chex.Array,
         **kwargs,
-        ) -> StackedLossAndDiagnostics:
+        ) -> StackedLossAndChannelLoss:
         """Returns the loss computed on normalized inputs and targets."""
         norm_inputs = normalize(inputs, self._scales["inputs"], self._locations["inputs"])
         norm_target_residuals = self._subtract_input_and_normalize_target(inputs, targets)
@@ -147,14 +147,14 @@ class StackedInputsAndResiduals(StackedPredictor):
         inputs: chex.Array,
         targets: chex.Array,
         **kwargs,
-        ) -> Tuple[StackedLossAndDiagnostics, chex.Array]:
+        ) -> Tuple[StackedLossAndChannelLoss, chex.Array]:
         """Returns the loss computed on normalized inputs and targets."""
         norm_inputs = normalize(inputs, self._scales["inputs"], self._locations["inputs"])
         norm_target_residuals = self._subtract_input_and_normalize_target(inputs, targets)
-        (loss, scalars), norm_predictions = self._predictor.loss_and_predictions(
+        (loss, loss_per_channel), norm_predictions = self._predictor.loss_and_predictions(
             norm_inputs,
             norm_target_residuals,
             **kwargs,
         )
         predictions = self._unnormalize_prediction_and_add_input(inputs, norm_predictions)
-        return (loss, scalars), predictions
+        return (loss, loss_per_channel), predictions

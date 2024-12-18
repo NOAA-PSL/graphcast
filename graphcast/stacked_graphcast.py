@@ -6,7 +6,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from graphcast.losses import stacked_mse
-from graphcast.stacked_predictor_base import StackedPredictor, StackedLossAndDiagnostics
+from graphcast.stacked_predictor_base import StackedPredictor, StackedLossAndChannelLoss
 from graphcast.graphcast import GraphCast, ModelConfig, TaskConfig
 from graphcast import xarray_jax
 
@@ -64,27 +64,27 @@ class StackedGraphCast(GraphCast, StackedPredictor):
         inputs: chex.Array,
         targets: chex.Array,
         weights: Optional[chex.Array | None] = None,
-        ) -> tuple[StackedLossAndDiagnostics, chex.Array]:
+        ) -> tuple[StackedLossAndChannelLoss, chex.Array]:
         # Forward pass
         predictions = self(inputs)
 
         # Compute loss
-        loss, diagnostics = stacked_mse(
+        loss, loss_per_channel = stacked_mse(
             predictions=predictions,
             targets=targets,
             weights=weights,
         )
-        return (loss, diagnostics), predictions
+        return (loss, loss_per_channel), predictions
 
     def loss(
         self,
         inputs: chex.Array,
         targets: chex.Array,
         weights: Optional[chex.Array | None] = None,
-        ) -> StackedLossAndDiagnostics:
+        ) -> StackedLossAndChannelLoss:
 
-        (loss, diagnostics), _ = self.loss_and_predictions(inputs, targets, weights)
-        return loss, diagnostics
+        (loss, loss_per_channel), _ = self.loss_and_predictions(inputs, targets, weights)
+        return loss, loss_per_channel
 
 
     def _maybe_init(self):

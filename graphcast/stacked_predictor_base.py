@@ -8,7 +8,7 @@ import jax.numpy as jnp
 import xarray
 import chex
 
-StackedLossAndDiagnostics = losses.StackedLossAndDiagnostics
+StackedLossAndChannelLoss = losses.StackedLossAndChannelLoss
 
 
 class StackedPredictor(abc.ABC):
@@ -56,7 +56,7 @@ class StackedPredictor(abc.ABC):
            inputs: chex.Array,
            targets: chex.Array,
            **optional_kwargs,
-           ) -> StackedLossAndDiagnostics:
+           ) -> StackedLossAndChannelLoss:
     """Computes a training loss, for predictors that are trainable.
 
     Why make this the Predictor's responsibility, rather than letting callers
@@ -82,7 +82,7 @@ class StackedPredictor(abc.ABC):
       loss: A DataArray with dimensions ('batch',) containing losses for each
         element of the batch. These will be averaged to give the final
         loss, locally and across replicas.
-      diagnostics: Mapping of additional quantities to log by name alongside the
+      loss_per_channel: Mapping of additional quantities to log by name alongside the
         loss. These will will typically correspond to terms in the loss. They
         should also have dimensions ('batch',) and will be averaged over the
         batch before logging.
@@ -99,7 +99,7 @@ class StackedPredictor(abc.ABC):
       inputs: chex.Array,
       targets: chex.Array,
       **optional_kwargs,
-      ) -> Tuple[StackedLossAndDiagnostics, chex.Array]:
+      ) -> Tuple[StackedLossAndChannelLoss, chex.Array]:
     """Like .loss but also returns corresponding predictions.
 
     Implementing this is optional as it's not used directly by the Experiment,
@@ -120,7 +120,7 @@ class StackedPredictor(abc.ABC):
         As for self.loss.
 
     Returns:
-      (loss, diagnostics)
+      (loss, loss_per_channel)
         As for self.loss
       predictions:
         The predictions which the loss relates to. These should be of the same

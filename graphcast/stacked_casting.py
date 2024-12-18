@@ -4,7 +4,7 @@ import contextlib
 from typing import Any, Mapping, Tuple, Optional
 
 import chex
-from graphcast.stacked_predictor_base import StackedPredictor, StackedLossAndDiagnostics
+from graphcast.stacked_predictor_base import StackedPredictor, StackedLossAndChannelLoss
 import haiku as hk
 import jax
 import jax.numpy as jnp
@@ -65,7 +65,7 @@ class StackedBfloat16Cast(Bfloat16Cast):
         inputs: chex.Array,
         targets: chex.Array,
         weights: Optional[chex.Array | None] = None
-        ) -> StackedLossAndDiagnostics:
+        ) -> StackedLossAndChannelLoss:
         if not self._enabled:
             return self._predictor.loss(inputs, targets, weights)
 
@@ -98,7 +98,7 @@ class StackedBfloat16Cast(Bfloat16Cast):
         inputs: chex.Array,
         targets: chex.Array,
         weights: Optional[chex.Array | None] = None
-        ) -> Tuple[StackedLossAndDiagnostics,
+        ) -> Tuple[StackedLossAndChannelLoss,
                    chex.Array]:
         if not self._enabled:
             return self._predictor.loss_and_predictions(
