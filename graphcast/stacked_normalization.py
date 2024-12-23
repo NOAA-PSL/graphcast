@@ -125,28 +125,30 @@ class StackedInputsAndResiduals(StackedPredictor):
     def __call__(
         self,
         inputs: chex.Array,
-        **kwargs
         ) -> chex.Array:
-        norm_inputs = normalize(inputs, self._scales["inputs"], self._locations["inputs"])
-        norm_predictions = self._predictor(norm_inputs, **kwargs)
+        norm_predictions = self.normalized_predict(inputs)
         return self._unnormalize_prediction_and_add_input(inputs, norm_predictions)
+
+    def normalized_predict(self, inputs):
+        norm_inputs = normalize(inputs, self._scales["inputs"], self._locations["inputs"])
+        return self._predictor(norm_inputs)
 
     def loss(
         self,
         inputs: chex.Array,
         targets: chex.Array,
-        **kwargs,
+        weights: chex.Array,
         ) -> StackedLossAndChannelLoss:
         """Returns the loss computed on normalized inputs and targets."""
         norm_inputs = normalize(inputs, self._scales["inputs"], self._locations["inputs"])
         norm_target_residuals = self._subtract_input_and_normalize_target(inputs, targets)
-        return self._predictor.loss(norm_inputs, norm_target_residuals, **kwargs)
+        return self._predictor.loss(norm_inputs, norm_target_residuals, weights)
 
     def loss_and_predictions(  # pytype: disable=signature-mismatch  # jax-ndarray
         self,
         inputs: chex.Array,
         targets: chex.Array,
-        **kwargs,
+        weights: chex.Array,
         ) -> Tuple[StackedLossAndChannelLoss, chex.Array]:
         """Returns the loss computed on normalized inputs and targets."""
         norm_inputs = normalize(inputs, self._scales["inputs"], self._locations["inputs"])
@@ -154,7 +156,7 @@ class StackedInputsAndResiduals(StackedPredictor):
         (loss, loss_per_channel), norm_predictions = self._predictor.loss_and_predictions(
             norm_inputs,
             norm_target_residuals,
-            **kwargs,
+            weights,
         )
         predictions = self._unnormalize_prediction_and_add_input(inputs, norm_predictions)
         return (loss, loss_per_channel), predictions
