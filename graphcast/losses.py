@@ -78,7 +78,7 @@ def stacked_mse(
     # recall prediction shape is (samples (batch), lat, lon, channels)
     loss_per_sample_channel = loss.sum(axis=(1,2))
     loss_per_sample = loss_per_sample_channel.sum(axis=-1)
-    return loss_per_sample, loss_per_sample_channel
+    return loss_per_sample.squeeze(), loss_per_sample_channel.squeeze()
 
 
 def weighted_mse_per_level(
