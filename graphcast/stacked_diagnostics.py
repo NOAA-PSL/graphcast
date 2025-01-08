@@ -13,6 +13,7 @@ import chex
 import jax.numpy as jnp
 from typing import Optional, Tuple
 
+from graphcast.losses import stacked_mse
 from graphcast.stacked_predictor_base import StackedPredictor, StackedLossAndChannelLoss
 from graphcast.stacked_normalization import normalize, unnormalize, StackedInputsAndResiduals
 from graphcast import xarray_tree
@@ -55,6 +56,9 @@ class StackedInputsResidualsDiagnostics(StackedInputsAndResiduals):
         self._residual_scales = diffs_stddev_by_level
         self._residual_locations = {"inputs": None, "targets": None, "diagnostics": None}
         self._last_input_channel_mapping = last_input_channel_mapping
+        self.mappings = mappings
+        self.masks = masks
+
 
         self._checkit(self._scales)
         self._checkit(self._locations)
@@ -112,7 +116,7 @@ class StackedInputsResidualsDiagnostics(StackedInputsAndResiduals):
         predictions = self._unnormalize_prediction_and_add_input(inputs, norm_predictions)
         prediction_diagnostics = self.calc_diagnostics(inputs, predictions)
 
-        norm_predictions = jnp.concatenate(
+        norm_preds_and_diags = jnp.concatenate(
             [norm_predictions, self.normalize_diagnostics(prediction_diagnostics)],
             axis=-1,
         )
@@ -120,13 +124,13 @@ class StackedInputsResidualsDiagnostics(StackedInputsAndResiduals):
         # prepare normalized targets with normalized target diagnostics
         norm_target_residuals = self._subtract_input_and_normalize_target(inputs, targets)
         target_diagnostics = self.calc_diagnostics(inputs, targets)
-        norm_targets = jnp.concatenate(
+        norm_targets_and_diags = jnp.concatenate(
             [norm_target_residuals, self.normalize_diagnostics(target_diagnostics)],
             axis=-1,
         )
 
         # compute loss
-        loss, loss_per_channel = stacked_mse(norm_predictions, norm_targets, weights)
+        loss, loss_per_channel = stacked_mse(norm_preds_and_diags, norm_targets_and_diags, weights)
         predictions_with_diagnostics = jnp.concatenate(
             [predictions, prediction_diagnostics],
             axis=-1,
