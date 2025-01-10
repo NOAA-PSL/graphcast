@@ -47,7 +47,6 @@ class StackedInputsResidualsDiagnostics(StackedInputsAndResiduals):
         diffs_stddev_by_level: dict[chex.Array, chex.Array],
         last_input_channel_mapping: dict,
         mappings: dict,
-        masks: dict,
     ):
         assert not isinstance(predictor, StackedInputsAndResiduals)
         self._predictor = predictor
@@ -57,8 +56,6 @@ class StackedInputsResidualsDiagnostics(StackedInputsAndResiduals):
         self._residual_locations = {"inputs": None, "targets": None, "diagnostics": None}
         self._last_input_channel_mapping = last_input_channel_mapping
         self.mappings = mappings
-        self.masks = masks
-
 
         self._checkit(self._scales)
         self._checkit(self._locations)
@@ -75,7 +72,7 @@ class StackedInputsResidualsDiagnostics(StackedInputsAndResiduals):
 
     def calc_diagnostics(self, inputs, outputs):
         return jnp.concatenate(
-            [func(inputs, outputs, self.masks) for func in self.mappings.values()],
+            [func(inputs, outputs, self.mappings["masks"], self.mappings["extra"]) for func in self.mappings["functions"].values()],
             axis=-1,
         )
 
