@@ -56,7 +56,7 @@ class StackedGraphCast(GraphCast, StackedPredictor):
 
         # Conver output flat vectors for the grid nodes to the format of the output.
         # [num_grid_nodes, batch, output_size] ->
-        # xarray (batch, one time step, lat, lon, level, multiple vars)
+        # xarray (batch, one time step, lat, lon, level, z_l, multiple vars)
         return self._grid_node_outputs_to_prediction(output_grid_nodes)
 
     def loss_and_predictions(
