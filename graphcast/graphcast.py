@@ -462,10 +462,10 @@ class GraphCast(predictor_base.Predictor):
             if "z_l" in predictions[var].dims:
                 predictions[var] = predictions[var]*inputs["landsea_mask"]
 
-            elif var.lower() == "SSH".lower():
+            elif var.lower() == "ssh":
                 predictions[var] = predictions[var]*inputs["landsea_mask"].isel(z_l=0)
 
-            elif var.lower() == "land".lower():
+            elif var.lower() == "land":
                 print("Rounding off land values to the nearest integer")
                 predictions[var]= predictions[var].round()
 
