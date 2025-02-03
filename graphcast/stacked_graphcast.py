@@ -67,7 +67,6 @@ class StackedGraphCast(GraphCast, StackedPredictor):
         ) -> tuple[StackedLossAndDiagnostics, chex.Array]:
         # Forward pass
         predictions = self(inputs)
-
         # Compute loss
         loss, diagnostics = stacked_mse(
             predictions=predictions,
@@ -131,5 +130,4 @@ class StackedGraphCast(GraphCast, StackedPredictor):
         )
         # get batch dimension first again
         result = np.moveaxis(result, 2, 0)
-        result = result.squeeze()
         return result
