@@ -135,7 +135,7 @@ MOM6_OCEAN_VARS = (
     "temp",         # Potential Temperature
     "uo",           # Sea Water X Velocity
     "vo",           # Sea Water Y Velocity
-        )
+)
 ALL_ATMOSPHERIC_VARS = ECMWF_ATMOSPHERIC_VARS + UFS_ATMOSPHERIC_VARS 
 ALL_OCEAN_VARS = MOM6_OCEAN_VARS
 
@@ -353,9 +353,11 @@ class GraphCast(predictor_base.Predictor):
         set(task_config.target_variables) & set(ALL_ATMOSPHERIC_VARS))
     num_ocean_vars = len(
         set(task_config.target_variables) & set(ALL_OCEAN_VARS))
-    num_outputs = (num_surface_vars +
-                   len(task_config.pressure_levels) * num_atmospheric_vars +
-                   len(task_config.ocn_vert_levels) * num_ocean_vars)
+    num_outputs = num_surface_vars
+    if task_config.pressure_levels is not None:
+        num_outputs += len(task_config.pressure_levels) * num_atmospheric_vars 
+    if task_config.ocn_vert_levels is not None:
+        num_outputs +=  len(task_config.ocn_vert_levels) * num_ocean_vars
 
     # Decoder, which moves data from the mesh back into the grid with a single
     # message passing step.
