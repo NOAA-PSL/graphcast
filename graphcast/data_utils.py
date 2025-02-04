@@ -160,7 +160,7 @@ def add_derived_vars(data: xarray.Dataset) -> None:
     data.update(
         featurize_progress(
             name=YEAR_PROGRESS,
-            dims=batch_dim + ("time",),
+            dims=batch_dim + data["datetime"].dims,
             progress=year_progress,
         )
     )
@@ -172,7 +172,7 @@ def add_derived_vars(data: xarray.Dataset) -> None:
     data.update(
         featurize_progress(
             name=DAY_PROGRESS,
-            dims=batch_dim + ("time",) + longitude_coord.dims,
+            dims=batch_dim + data["datetime"].dims + longitude_coord.dims,
             progress=day_progress,
         )
     )
