@@ -1,14 +1,15 @@
-
 from typing import Optional
 import xarray
 import chex
 import jax.numpy as jnp
 import numpy as np
+import jax.debug as jdb
 
 from graphcast.losses import stacked_mse
 from graphcast.stacked_predictor_base import StackedPredictor, StackedLossAndDiagnostics
 from graphcast.graphcast import GraphCast, ModelConfig, TaskConfig
 from graphcast import xarray_jax
+from graphcast.stacked_utils import get_channel_index, search_nested_dict
 
 class StackedGraphCast(GraphCast, StackedPredictor):
 
@@ -75,6 +76,70 @@ class StackedGraphCast(GraphCast, StackedPredictor):
         )
         return (loss, diagnostics), predictions
 
+    def loss_and_predictions_coupled(
+        self,
+        inputs: chex.Array,
+        targets: chex.Array,
+        weights: Optional[chex.Array | None] = None,
+        meta_inputs: Optional[chex.Array | None] = None,
+        meta_targets: Optional[chex.Array | None] = None
+        ) -> tuple[StackedLossAndDiagnostics, chex.Array]:
+        # Forward pass
+        predictions = self(inputs)
+        ###  Apply appropriate masks here, like in graphcast.py
+        assert all((meta_inputs is not None, meta_targets is not None)), \
+                "meta data for either inputs or targets is missing"
+
+        _, dict_landsea_mask = search_nested_dict(meta_inputs, "varname", "landsea_mask")
+        if len(dict_landsea_mask) == 0:
+            raise NameError("landsea_mask not found...")
+        cidx_land_static, dict_land_static = search_nested_dict(meta_inputs, "varname", "land_static")
+        if len(dict_land_static) == 0:
+            raise NameError("Static land mask not found...")
+        common_2d_ocn_vars = ["ssh"]
+        common_2d_land_vars = ["tmpsfc"]
+
+        for cidx in list(meta_targets.keys()):
+            meta_cidx = meta_targets[cidx]
+            varname = meta_cidx["varname"]
+            # Note: use land_static to mask ssh and other surface ocean variables
+            # as the top layer of 3D FV regridded landsea_mask may not be very close
+            # to the surface
+            if (varname.lower() in common_2d_ocn_vars
+                or varname.lower() in common_2d_land_var
+                or varname.lower().startswith("soil")
+                or varname.lower().startswith("ice")
+                ):
+                apply_mask = True
+                normalized_mask = jnp.squeeze(inputs[..., cidx_land_static])
+                if varname.lower() in common_2d_ocn_vars or varname.lower().startswith("ice"):
+                    binary_mask = jnp.where(normalized_mask>0, 0, 1)
+                else:
+                    binary_mask = jnp.where(normalized_mask>0, 1, 0)
+                predictions = predictions.at[..., cidx].set(predictions[..., cidx]*binary_mask)
+
+            elif "z_l" in meta_cidx:
+                apply_mask = True
+                ch_vert, _  = search_nested_dict(dict_landsea_mask, "z_l", meta_cidx["z_l"])
+                normalized_mask = jnp.squeeze(inputs[..., ch_vert])
+                binary_mask = jnp.where(normalized_mask>0, 1, 0)
+                #jdb.print("3D binary ocn mask used: mean = {}", jnp.mean(binary_mask))
+                predictions = predictions.at[..., cidx].set(predictions[..., cidx]*binary_mask)
+
+        # Compute loss
+        loss, diagnostics = stacked_mse(
+            predictions=predictions,
+            targets=targets,
+            weights=weights,
+        )
+        return (loss, diagnostics), predictions
+
+    def get_tracer_shape(self, arr):
+        """
+        Returns the size of a JAX tracer.
+        """
+        return jnp.shape(arr)
+
     def loss(
         self,
         inputs: chex.Array,
@@ -85,6 +150,17 @@ class StackedGraphCast(GraphCast, StackedPredictor):
         (loss, diagnostics), _ = self.loss_and_predictions(inputs, targets, weights)
         return loss, diagnostics
 
+    def loss_coupled(
+        self,
+        inputs: chex.Array,
+        targets: chex.Array,
+        weights: Optional[chex.Array | None] = None,
+        meta_inputs: Optional[chex.Array | None] = None,
+        meta_targets: Optional[chex.Array | None] = None,
+        ) -> StackedLossAndDiagnostics:
+
+        (loss, diagnostics), _ = self.loss_and_predictions_coupled(inputs, targets, weights, meta_inputs, meta_targets)
+        return loss, diagnostics
 
     def _maybe_init(self):
         if not self._initialized:

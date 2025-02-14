@@ -142,6 +142,17 @@ class StackedInputsAndResiduals(StackedPredictor):
         norm_target_residuals = self._subtract_input_and_normalize_target(inputs, targets)
         return self._predictor.loss(norm_inputs, norm_target_residuals, **kwargs)
 
+    def loss_coupled(
+        self,
+        inputs: chex.Array,
+        targets: chex.Array,
+        **kwargs,
+        ) -> StackedLossAndDiagnostics:
+        """Returns the loss computed on normalized inputs and targets."""
+        norm_inputs = normalize(inputs, self._scales["inputs"], self._locations["inputs"])
+        norm_target_residuals = self._subtract_input_and_normalize_target(inputs, targets)
+        return self._predictor.loss_coupled(norm_inputs, norm_target_residuals, **kwargs)
+
     def loss_and_predictions(  # pytype: disable=signature-mismatch  # jax-ndarray
         self,
         inputs: chex.Array,
@@ -152,6 +163,23 @@ class StackedInputsAndResiduals(StackedPredictor):
         norm_inputs = normalize(inputs, self._scales["inputs"], self._locations["inputs"])
         norm_target_residuals = self._subtract_input_and_normalize_target(inputs, targets)
         (loss, scalars), norm_predictions = self._predictor.loss_and_predictions(
+            norm_inputs,
+            norm_target_residuals,
+            **kwargs,
+        )
+        predictions = self._unnormalize_prediction_and_add_input(inputs, norm_predictions)
+        return (loss, scalars), predictions
+
+    def loss_and_predictions_coupled(  # pytype: disable=signature-mismatch  # jax-ndarray
+        self,
+        inputs: chex.Array,
+        targets: chex.Array,
+        **kwargs,
+        ) -> Tuple[StackedLossAndDiagnostics, chex.Array]:
+        """Returns the loss computed on normalized inputs and targets."""
+        norm_inputs = normalize(inputs, self._scales["inputs"], self._locations["inputs"])
+        norm_target_residuals = self._subtract_input_and_normalize_target(inputs, targets)
+        (loss, scalars), norm_predictions = self._predictor.loss_and_predictions_coupled(
             norm_inputs,
             norm_target_residuals,
             **kwargs,
