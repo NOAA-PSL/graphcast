@@ -106,11 +106,10 @@ class StackedGraphCast(GraphCast, StackedPredictor):
             # as the top layer of 3D FV regridded landsea_mask may not be very close
             # to the surface
             if (varname.lower() in common_2d_ocn_vars
-                or varname.lower() in common_2d_land_var
+                or varname.lower() in common_2d_land_vars
                 or varname.lower().startswith("soil")
                 or varname.lower().startswith("ice")
                 ):
-                apply_mask = True
                 normalized_mask = jnp.squeeze(inputs[..., cidx_land_static])
                 if varname.lower() in common_2d_ocn_vars or varname.lower().startswith("ice"):
                     binary_mask = jnp.where(normalized_mask>0, 0, 1)
@@ -119,11 +118,9 @@ class StackedGraphCast(GraphCast, StackedPredictor):
                 predictions = predictions.at[..., cidx].set(predictions[..., cidx]*binary_mask)
 
             elif "z_l" in meta_cidx:
-                apply_mask = True
                 ch_vert, _  = search_nested_dict(dict_landsea_mask, "z_l", meta_cidx["z_l"])
                 normalized_mask = jnp.squeeze(inputs[..., ch_vert])
                 binary_mask = jnp.where(normalized_mask>0, 1, 0)
-                #jdb.print("3D binary ocn mask used: mean = {}", jnp.mean(binary_mask))
                 predictions = predictions.at[..., cidx].set(predictions[..., cidx]*binary_mask)
 
         # Compute loss
