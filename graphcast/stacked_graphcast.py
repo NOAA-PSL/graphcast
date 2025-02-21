@@ -3,7 +3,6 @@ import xarray
 import chex
 import jax.numpy as jnp
 import numpy as np
-import jax.debug as jdb
 
 from graphcast.losses import stacked_mse
 from graphcast.stacked_predictor_base import StackedPredictor, StackedLossAndDiagnostics
