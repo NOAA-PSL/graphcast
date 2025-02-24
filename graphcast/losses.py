@@ -26,7 +26,7 @@ import xarray
 LossAndDiagnostics = tuple[xarray.DataArray, xarray.Dataset]
 
 # (total loss per sample, loss per channel per sample)
-StackedLossAndDiagnostics = tuple[chex.Array, chex.Array]
+StackedLossAndChannelLoss = tuple[chex.Array, chex.Array]
 
 
 class LossFunction(Protocol):
@@ -51,7 +51,7 @@ class LossFunction(Protocol):
       loss: A DataArray with dimensions ('batch',) containing losses for each
         element of the batch. These will be averaged to give the final
         loss, locally and across replicas.
-      diagnostics: Mapping of additional quantities to log by name alongside the
+      loss_per_variable: Mapping of additional quantities to log by name alongside the
         loss. These will will typically correspond to terms in the loss. They
         should also have dimensions ('batch',) and will be averaged over the
         batch before logging.
@@ -61,7 +61,7 @@ def stacked_mse(
     predictions: chex.Array,
     targets: chex.Array,
     weights: Optional[chex.Array | None] = None,
-) -> StackedLossAndDiagnostics:
+) -> StackedLossAndChannelLoss:
     """A very streamlined MSE loss function
     preserves final channel dimension
 
