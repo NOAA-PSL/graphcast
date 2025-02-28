@@ -108,7 +108,16 @@ UFS_ATMOSPHERIC_VARS = (
     "vgrd",         # Meridional Wind
 )
 
-ALL_ATMOSPHERIC_VARS = ECMWF_ATMOSPHERIC_VARS + UFS_ATMOSPHERIC_VARS
+GEFS_ATMOSPHERIC_VARS = (
+    "gh",
+    "u",
+    "v",
+    "w",
+    "t",
+    "q",
+)
+
+ALL_ATMOSPHERIC_VARS = ECMWF_ATMOSPHERIC_VARS + UFS_ATMOSPHERIC_VARS + GEFS_ATMOSPHERIC_VARS
 
 TARGET_SURFACE_VARS = (
     "2m_temperature",
