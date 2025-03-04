@@ -387,8 +387,10 @@ def extract_inputs_targets_forcings_coupled(
   Additional arguments passed to
   graphcast.solar_radiation.get_toa_incident_solar_radiation_for_xarray
   """
-  dataset = dataset.sel(level=list(pressure_levels), z_l=list(ocn_vert_levels))
-  
+  if pressure_levels:
+      dataset = dataset.sel(level=list(pressure_levels))
+  if ocn_vert_levels:
+      dataset = dataset.sel(z_l=list(ocn_vert_levels))
   # "Forcings" include derived variables that do not exist in the original ERA5
   # or HRES datasets, as well as other variables (e.g. tisr) that need to be
   # computed manually for the target lead times. Compute the requested ones.
