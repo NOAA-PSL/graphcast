@@ -89,14 +89,10 @@ class StackedGraphCast(GraphCast, StackedPredictor):
         assert all((meta_inputs is not None, meta_targets is not None)), \
                 "meta data for either inputs or targets is missing"
 
-        _, dict_landsea_mask = search_nested_dict(meta_inputs, "varname", "landsea_mask")
-        if len(dict_landsea_mask) == 0:
-            raise NameError("landsea_mask not found...")
+        _, dict_ocean_static_3d = search_nested_dict(meta_inputs, "varname", "ocean_static_3d")
         cidx_land_static, dict_land_static = search_nested_dict(meta_inputs, "varname", "land_static")
-        if len(dict_land_static) == 0:
-            raise NameError("Static land mask not found...")
         common_2d_ocn_vars = ["ssh"]
-        common_2d_land_vars = ["tmpsfc"]
+        common_2d_land_vars = ["soilm"]
 
         for cidx in list(meta_targets.keys()):
             meta_cidx = meta_targets[cidx]
@@ -106,7 +102,6 @@ class StackedGraphCast(GraphCast, StackedPredictor):
             # to the surface
             if (varname.lower() in common_2d_ocn_vars
                 or varname.lower() in common_2d_land_vars
-                or varname.lower().startswith("soil")
                 or varname.lower().startswith("ice")
                 ):
                 normalized_mask = jnp.squeeze(inputs[..., cidx_land_static])
@@ -117,7 +112,7 @@ class StackedGraphCast(GraphCast, StackedPredictor):
                 predictions = predictions.at[..., cidx].set(predictions[..., cidx]*binary_mask)
 
             elif "z_l" in meta_cidx:
-                ch_vert, _  = search_nested_dict(dict_landsea_mask, "z_l", meta_cidx["z_l"])
+                ch_vert, _  = search_nested_dict(dict_ocean_static_3d, "z_l", meta_cidx["z_l"])
                 normalized_mask = jnp.squeeze(inputs[..., ch_vert])
                 binary_mask = jnp.where(normalized_mask>0, 1, 0)
                 predictions = predictions.at[..., cidx].set(predictions[..., cidx]*binary_mask)
