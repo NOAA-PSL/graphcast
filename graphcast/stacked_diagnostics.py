@@ -117,7 +117,7 @@ class StackedInputsResidualsDiagnostics(StackedInputsAndResiduals):
         )
 
         # compute loss
-        loss, loss_per_channel = stacked_mse(
+        loss, loss_by_channel = stacked_mse(
             norm_preds_and_diags,
             norm_targets_and_diags,
             loss_weights["forecast_mse"],
@@ -126,4 +126,4 @@ class StackedInputsResidualsDiagnostics(StackedInputsAndResiduals):
             [predictions, prediction_diagnostics],
             axis=-1,
         )
-        return (loss, {"forecast_mse": loss_per_channel}), predictions_with_diagnostics
+        return (loss, {"forecast_mse": loss_by_channel}), predictions_with_diagnostics

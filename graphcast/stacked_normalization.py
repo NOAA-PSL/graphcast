@@ -143,7 +143,7 @@ class StackedInputsAndResiduals(StackedPredictor):
     ) -> StackedLossAndChannelLoss:
         """Returns the loss computed on normalized inputs and targets."""
         (loss, loss_by_channel), _ = self.loss_and_predictions(inputs, targets, loss_weights)
-        return loss, loss_per_channel
+        return loss, loss_by_channel
 
     def loss_and_predictions(  # pytype: disable=signature-mismatch  # jax-ndarray
         self,
@@ -154,10 +154,10 @@ class StackedInputsAndResiduals(StackedPredictor):
         """Returns the loss computed on normalized inputs and targets."""
         norm_inputs = normalize(inputs, self._scales["inputs"], self._locations["inputs"])
         norm_target_residuals = self._subtract_input_and_normalize_target(inputs, targets)
-        (loss, loss_per_channel), norm_predictions = self._predictor.loss_and_predictions(
+        (loss, loss_by_channel), norm_predictions = self._predictor.loss_and_predictions(
             norm_inputs,
             norm_target_residuals,
-            loss_weights["forecast_mse"],
+            loss_weights,
         )
         predictions = self._unnormalize_prediction_and_add_input(inputs, norm_predictions)
-        return (loss, {"forecast_mse": loss_per_channel}), predictions
+        return (loss, loss_by_channel), predictions

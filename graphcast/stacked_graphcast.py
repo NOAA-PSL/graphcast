@@ -1,5 +1,6 @@
 
 from typing import Optional
+import logging
 import xarray
 import chex
 import jax.numpy as jnp
@@ -70,12 +71,12 @@ class StackedGraphCast(GraphCast, StackedPredictor):
         predictions = self(inputs)
 
         # Compute loss
-        loss, loss_per_channel = stacked_mse(
+        loss, loss_by_channel = stacked_mse(
             predictions=predictions,
             targets=targets,
             loss_weights=loss_weights["forecast_mse"],
         )
-        return (loss, {"forecast_mse": loss_per_channel}), predictions
+        return (loss, {"forecast_mse": loss_by_channel}), predictions
 
     def loss(
         self,
@@ -84,8 +85,8 @@ class StackedGraphCast(GraphCast, StackedPredictor):
         loss_weights: dict[chex.Array],
     ) -> StackedLossAndChannelLoss:
 
-        (loss, loss_per_channel), _ = self.loss_and_predictions(inputs, targets, loss_weights)
-        return loss, loss_per_channel
+        (loss, loss_by_channel), _ = self.loss_and_predictions(inputs, targets, loss_weights)
+        return loss, loss_by_channel
 
 
     def _maybe_init(self):

@@ -82,7 +82,7 @@ class StackedPredictor(abc.ABC):
       loss: A DataArray with dimensions ('batch',) containing losses for each
         element of the batch. These will be averaged to give the final
         loss, locally and across replicas.
-      loss_per_channel: Mapping of additional quantities to log by name alongside the
+      loss_by_channel: Mapping of additional quantities to log by name alongside the
         loss. These will will typically correspond to terms in the loss. They
         should also have dimensions ('batch',) and will be averaged over the
         batch before logging.
@@ -117,7 +117,7 @@ class StackedPredictor(abc.ABC):
         As for self.loss.
 
     Returns:
-      (loss, loss_per_channel)
+      (loss, loss_by_channel)
         As for self.loss
       predictions:
         The predictions which the loss relates to. These should be of the same

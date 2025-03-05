@@ -130,8 +130,8 @@ class StackedInputsResidualsDeviations(StackedInputsAndResiduals):
 
         # put it all together now
         loss = jnp.sum(forecast_mse_per_member, axis=0) + deviation_mse
-        loss_per_channel = {
+        loss_by_channel = {
             "forecast_mse": jnp.sum(forecast_mse_per_member_per_channel, axis=0),
             "deviation_mse": deviation_mse_per_channel,
         }
-        return (loss, loss_per_channel), predictions
+        return (loss, loss_by_channel), predictions
