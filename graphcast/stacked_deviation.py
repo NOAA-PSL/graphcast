@@ -12,7 +12,6 @@ import logging
 import chex
 import jax.numpy as jnp
 from typing import Optional, Tuple
-
 from graphcast.losses import stacked_mse
 from graphcast.stacked_predictor_base import StackedPredictor, StackedLossAndChannelLoss
 from graphcast.stacked_normalization import normalize, unnormalize, StackedInputsAndResiduals
@@ -32,8 +31,8 @@ class StackedInputsResidualsDeviations(StackedInputsAndResiduals):
         stddev_by_level: dict,
         mean_by_level: dict,
         diffs_stddev_by_level: dict,
-        deviation_stddev_by_level: dict,
         last_input_channel_mapping: dict,
+        deviation_stddev_by_level: dict,
     ):
         super().__init__(
             predictor=predictor,
@@ -43,7 +42,7 @@ class StackedInputsResidualsDeviations(StackedInputsAndResiduals):
             last_input_channel_mapping=last_input_channel_mapping,
         )
 
-        self._deviation_locations = None
+        self._deviation_locations = {"inputs": None, "targets": None}
         self._deviation_scales = deviation_stddev_by_level
         self._checkit(self._deviation_scales)
 
@@ -90,8 +89,8 @@ class StackedInputsResidualsDeviations(StackedInputsAndResiduals):
 
         # compute normalized and unnormalized prediction for each initial condition
         predictions = []
-        forecast_mse_per_member = []
-        forecast_mse_per_member_per_channel = []
+        forecast_mse_by_member = []
+        forecast_mse_by_member_by_channel = []
         for this_input, this_target in zip(
             [inputs[:,0,...], inputs[:,1,...]],
             [targets[:,0,...], targets[:,1,...]],
@@ -106,32 +105,32 @@ class StackedInputsResidualsDeviations(StackedInputsAndResiduals):
                 this_norm_target_residual,
                 loss_weights["forecast_mse"],
             )
-            forecast_mse_per_member.append(loss1)
-            forecast_mse_per_member_per_channel.append(loss1)
+            forecast_mse_by_member.append(loss1)
+            forecast_mse_by_member_by_channel.append(loss2)
 
             # now get unnormalized predictions for deviation
             predictions.append(
-                self._unnormalize_prediction_and_add_input(this_input, this_norm_predictions)
+                self._unnormalize_prediction_and_add_input(this_input, this_norm_prediction)
             )
 
         # compute deviations in un-normalized space
         prediction_deviations = predictions[1] - predictions[0]
         norm_prediction_deviations = self.normalize_deviations(prediction_deviations)
 
-        target_deviations = targets[1] - targets[0]
+        target_deviations = targets[:,1,...] - targets[:,0,...]
         norm_target_deviations = self.normalize_deviations(target_deviations)
 
         # MSE loss of deviations
-        deviation_mse, deviation_mse_per_channel = stacked_mse(
+        deviation_mse, deviation_mse_by_channel = stacked_mse(
             norm_prediction_deviations,
             norm_target_deviations,
             loss_weights["deviation_mse"],
         )
 
         # put it all together now
-        loss = jnp.sum(forecast_mse_per_member, axis=0) + deviation_mse
+        loss = forecast_mse_by_member[0] + forecast_mse_by_member[1] + deviation_mse
         loss_by_channel = {
-            "forecast_mse": jnp.sum(forecast_mse_per_member_per_channel, axis=0),
-            "deviation_mse": deviation_mse_per_channel,
+            "forecast_mse": forecast_mse_by_member_by_channel[0] + forecast_mse_by_member_by_channel[1],
+            "deviation_mse": deviation_mse_by_channel,
         }
         return (loss, loss_by_channel), predictions
