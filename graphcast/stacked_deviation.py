@@ -74,22 +74,11 @@ class StackedInputsResidualsDeviations(StackedInputsAndResiduals):
     def normalize_deviations(self, deviations):
         return normalize(deviations, self._deviation_scales["targets"], self._deviation_locations["targets"])
 
-    def loss(
-        self,
-        inputs: tuple[chex.Array],
-        targets: tuple[chex.Array],
-        weights: chex.Array,
-        deviation_weights: chex.Array,
-    ) -> StackedLossAndChannelLoss:
-        (loss, loss_per_channel), _ = self.loss_and_predictions(inputs, targets, weights, deviation_weights)
-        return loss, loss_per_channel
-
     def loss_and_predictions(  # pytype: disable=signature-mismatch  # jax-ndarray
         self,
         inputs: tuple[chex.Array],
         targets: tuple[chex.Array],
-        weights: chex.Array,
-        deviation_weights: chex.Array,
+        loss_weights: dict[chex.Array],
     ) -> Tuple[StackedLossAndChannelLoss, chex.Array]:
         """
         I'm hackily assuming that inputs and targets are tuples of length 2 with the ICs and targets
@@ -112,7 +101,11 @@ class StackedInputsResidualsDeviations(StackedInputsAndResiduals):
             this_norm_prediction = self.normalized_predict(this_input)
             this_norm_target_residual = self._subtract_input_and_normalize_target(this_input, this_target)
 
-            loss1, loss2 = stacked_mse(this_norm_prediction, this_norm_target_residual)
+            loss1, loss2 = stacked_mse(
+                this_norm_prediction,
+                this_norm_target_residual,
+                loss_weights["forecast_mse"],
+            )
             forecast_mse_per_member.append(loss1)
             forecast_mse_per_member_per_channel.append(loss1)
 
@@ -132,10 +125,13 @@ class StackedInputsResidualsDeviations(StackedInputsAndResiduals):
         deviation_mse, deviation_mse_per_channel = stacked_mse(
             norm_prediction_deviations,
             norm_target_deviations,
-            deviation_weights,
+            loss_weights["deviation_mse"],
         )
 
         # put it all together now
         loss = jnp.sum(forecast_mse_per_member, axis=0) + deviation_mse
-        loss_per_channel = jnp.sum(forecast_mse_per_member_per_channel, axis=0) + deviation_mse_per_channel
+        loss_per_channel = {
+            "forecast_mse": jnp.sum(forecast_mse_per_member_per_channel, axis=0),
+            "deviation_mse": deviation_mse_per_channel,
+        }
         return (loss, loss_per_channel), predictions

@@ -63,8 +63,9 @@ class StackedGraphCast(GraphCast, StackedPredictor):
         self,
         inputs: chex.Array,
         targets: chex.Array,
-        weights: Optional[chex.Array | None] = None,
-        ) -> tuple[StackedLossAndChannelLoss, chex.Array]:
+        loss_weights: dict[chex.Array],
+    ) -> tuple[StackedLossAndChannelLoss, chex.Array]:
+
         # Forward pass
         predictions = self(inputs)
 
@@ -72,18 +73,18 @@ class StackedGraphCast(GraphCast, StackedPredictor):
         loss, loss_per_channel = stacked_mse(
             predictions=predictions,
             targets=targets,
-            weights=weights,
+            loss_weights=loss_weights["forecast_mse"],
         )
-        return (loss, loss_per_channel), predictions
+        return (loss, {"forecast_mse": loss_per_channel}), predictions
 
     def loss(
         self,
         inputs: chex.Array,
         targets: chex.Array,
-        weights: Optional[chex.Array | None] = None,
-        ) -> StackedLossAndChannelLoss:
+        loss_weights: dict[chex.Array],
+    ) -> StackedLossAndChannelLoss:
 
-        (loss, loss_per_channel), _ = self.loss_and_predictions(inputs, targets, weights)
+        (loss, loss_per_channel), _ = self.loss_and_predictions(inputs, targets, loss_weights)
         return loss, loss_per_channel
 
 
@@ -101,7 +102,7 @@ class StackedGraphCast(GraphCast, StackedPredictor):
     def _inputs_to_grid_node_features(
         self,
         inputs: chex.Array,
-        ) -> chex.Array:
+    ) -> chex.Array:
         """inputs expected to be as [batch, lat, lon, channels] or [lat, lon, channels]
 
         Returns:
@@ -118,7 +119,7 @@ class StackedGraphCast(GraphCast, StackedPredictor):
     def _grid_node_outputs_to_prediction(
         self,
         grid_node_outputs: chex.Array,
-        ) -> chex.Array:
+    ) -> chex.Array:
         """returned as [batch, lat, lon, channels]"""
 
         assert self._grid_lat is not None and self._grid_lon is not None

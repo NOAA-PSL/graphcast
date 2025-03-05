@@ -90,21 +90,11 @@ class StackedInputsResidualsDiagnostics(StackedInputsAndResiduals):
             axis=-1,
         )
 
-    def loss(
-        self,
-        inputs: chex.Array,
-        targets: chex.Array,
-        weights: chex.Array,
-    ) -> StackedLossAndChannelLoss:
-        """Returns the loss computed on normalized inputs and targets."""
-        (loss, loss_by_channel), _ = self.loss_and_predictions(inputs, targets, weights)
-        return loss, loss_by_channel
-
     def loss_and_predictions(  # pytype: disable=signature-mismatch  # jax-ndarray
         self,
         inputs: chex.Array,
         targets: chex.Array,
-        weights: chex.Array,
+        loss_weights: dict[chex.Array],
     ) -> Tuple[StackedLossAndChannelLoss, chex.Array]:
         """Note that the weights have to include the diagnostic channels too"""
 
@@ -127,9 +117,13 @@ class StackedInputsResidualsDiagnostics(StackedInputsAndResiduals):
         )
 
         # compute loss
-        loss, loss_per_channel = stacked_mse(norm_preds_and_diags, norm_targets_and_diags, weights)
+        loss, loss_per_channel = stacked_mse(
+            norm_preds_and_diags,
+            norm_targets_and_diags,
+            loss_weights["forecast_mse"],
+        )
         predictions_with_diagnostics = jnp.concatenate(
             [predictions, prediction_diagnostics],
             axis=-1,
         )
-        return (loss, loss_per_channel), predictions_with_diagnostics
+        return (loss, {"forecast_mse": loss_per_channel}), predictions_with_diagnostics

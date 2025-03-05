@@ -39,7 +39,7 @@ class StackedBfloat16Cast(Bfloat16Cast):
         self,
         inputs: chex.Array,
         **kwargs
-        ) -> chex.Array:
+    ) -> chex.Array:
         if not self._enabled:
             return self._predictor(inputs, **kwargs)
 
@@ -64,17 +64,17 @@ class StackedBfloat16Cast(Bfloat16Cast):
         self,
         inputs: chex.Array,
         targets: chex.Array,
-        weights: Optional[chex.Array | None] = None
-        ) -> StackedLossAndChannelLoss:
+        loss_weights: dict[chex.Array],
+    ) -> StackedLossAndChannelLoss:
         if not self._enabled:
-            return self._predictor.loss(inputs, targets, weights)
+            return self._predictor.loss(inputs, targets, loss_weights)
 
         with bfloat16_variable_view():
             loss, scalars = self._predictor.loss(
                 *_inputs_targets_weights_to_bfloat16(
                     inputs,
                     targets,
-                    weights,
+                    loss_weights,
                 )
             )
 
@@ -97,14 +97,14 @@ class StackedBfloat16Cast(Bfloat16Cast):
         self,
         inputs: chex.Array,
         targets: chex.Array,
-        weights: Optional[chex.Array | None] = None
-        ) -> Tuple[StackedLossAndChannelLoss,
-                   chex.Array]:
+        loss_weights: dict[chex.Array],
+    ) -> Tuple[StackedLossAndChannelLoss, chex.Array]:
+
         if not self._enabled:
             return self._predictor.loss_and_predictions(
                 inputs,
                 targets,
-                weights,
+                loss_weights,
             )
 
         with bfloat16_variable_view():
@@ -112,7 +112,7 @@ class StackedBfloat16Cast(Bfloat16Cast):
                 *_inputs_targets_weights_to_bfloat16(
                     inputs,
                     targets,
-                    weights,
+                    loss_weights,
                 )
             )
 
@@ -138,12 +138,10 @@ def infer_floating_dtype(array: chex.Array) -> np.dtype:
 def _inputs_targets_weights_to_bfloat16(
     inputs: chex.Array,
     targets: chex.Array,
-    weights: Optional[chex.Array | None] = None,
-    ) -> Tuple[chex.Array,
-               chex.Array,
-               chex.Array]:
+    loss_weights: dict[chex.Array],
+) -> Tuple[chex.Array, chex.Array, dict[chex.Array]]:
 
     i16 = inputs.astype(jnp.bfloat16)
-    t16 = jax.tree_util.tree_map(lambda x: x.astype(jnp.bfloat16), targets)
-    w16 = weights.astype(jnp.bfloat16) if weights is not None else None
+    t16 = targets.astype(jnp.bfloat16)
+    w16 = jax.tree_util.tree_map(lambda x: x.astype(jnp.bfloat16), loss_weights)
     return i16, t16, w16

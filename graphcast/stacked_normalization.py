@@ -14,10 +14,11 @@ from graphcast import xarray_tree
 import xarray
 
 
-def normalize(values: chex.Array,
-              scales: chex.Array,
-              locations: Optional[chex.Array],
-              ) -> chex.Array:
+def normalize(
+    values: chex.Array,
+    scales: chex.Array,
+    locations: Optional[chex.Array],
+) -> chex.Array:
     """Normalize variables using the given scales and (optionally) locations."""
     result = values
     if locations is not None:
@@ -27,10 +28,11 @@ def normalize(values: chex.Array,
     return result
 
 
-def unnormalize(values: chex.Array,
-                scales: chex.Array,
-                locations: Optional[chex.Array],
-                ) -> chex.Array:
+def unnormalize(
+    values: chex.Array,
+    scales: chex.Array,
+    locations: Optional[chex.Array],
+) -> chex.Array:
     """Unnormalize variables using the given scales and (optionally) locations."""
     result = values * scales#.astype(values.dtype)
 
@@ -74,7 +76,7 @@ class StackedInputsAndResiduals(StackedPredictor):
         mean_by_level: dict[chex.Array, chex.Array],
         diffs_stddev_by_level: dict[chex.Array, chex.Array],
         last_input_channel_mapping: dict,
-        ):
+    ):
         self._predictor = predictor
         self._scales = stddev_by_level
         self._locations = mean_by_level
@@ -125,7 +127,7 @@ class StackedInputsAndResiduals(StackedPredictor):
     def __call__(
         self,
         inputs: chex.Array,
-        ) -> chex.Array:
+    ) -> chex.Array:
         norm_predictions = self.normalized_predict(inputs)
         return self._unnormalize_prediction_and_add_input(inputs, norm_predictions)
 
@@ -137,26 +139,25 @@ class StackedInputsAndResiduals(StackedPredictor):
         self,
         inputs: chex.Array,
         targets: chex.Array,
-        weights: chex.Array,
-        ) -> StackedLossAndChannelLoss:
+        loss_weights: dict[chex.Array],
+    ) -> StackedLossAndChannelLoss:
         """Returns the loss computed on normalized inputs and targets."""
-        norm_inputs = normalize(inputs, self._scales["inputs"], self._locations["inputs"])
-        norm_target_residuals = self._subtract_input_and_normalize_target(inputs, targets)
-        return self._predictor.loss(norm_inputs, norm_target_residuals, weights)
+        (loss, loss_by_channel), _ = self.loss_and_predictions(inputs, targets, loss_weights)
+        return loss, loss_per_channel
 
     def loss_and_predictions(  # pytype: disable=signature-mismatch  # jax-ndarray
         self,
         inputs: chex.Array,
         targets: chex.Array,
-        weights: chex.Array,
-        ) -> Tuple[StackedLossAndChannelLoss, chex.Array]:
+        loss_weights: dict[chex.Array],
+    ) -> Tuple[StackedLossAndChannelLoss, chex.Array]:
         """Returns the loss computed on normalized inputs and targets."""
         norm_inputs = normalize(inputs, self._scales["inputs"], self._locations["inputs"])
         norm_target_residuals = self._subtract_input_and_normalize_target(inputs, targets)
         (loss, loss_per_channel), norm_predictions = self._predictor.loss_and_predictions(
             norm_inputs,
             norm_target_residuals,
-            weights,
+            loss_weights["forecast_mse"],
         )
         predictions = self._unnormalize_prediction_and_add_input(inputs, norm_predictions)
-        return (loss, loss_per_channel), predictions
+        return (loss, {"forecast_mse": loss_per_channel}), predictions

@@ -26,7 +26,7 @@ import xarray
 LossAndDiagnostics = tuple[xarray.DataArray, xarray.Dataset]
 
 # (total loss per sample, loss per channel per sample)
-StackedLossAndChannelLoss = tuple[chex.Array, chex.Array]
+StackedLossAndChannelLoss = tuple[chex.Array, dict[chex.Array]]
 
 
 class LossFunction(Protocol):
@@ -60,8 +60,8 @@ class LossFunction(Protocol):
 def stacked_mse(
     predictions: chex.Array,
     targets: chex.Array,
-    weights: Optional[chex.Array | None] = None,
-) -> StackedLossAndChannelLoss:
+    loss_weights: chex.Array,
+) -> tuple[chex.Array, chex.Array]:
     """A very streamlined MSE loss function
     preserves final channel dimension
 
@@ -72,8 +72,7 @@ def stacked_mse(
     """
     # compute loss
     loss = (predictions - targets)**2
-    if weights is not None:
-        loss *= weights
+    loss *= loss_weights
 
     # recall prediction shape is (samples (batch), lat, lon, channels)
     loss_per_sample_channel = loss.sum(axis=(1,2))

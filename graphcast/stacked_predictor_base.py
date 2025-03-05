@@ -89,10 +89,7 @@ class StackedPredictor(abc.ABC):
         You need not include the loss itself in this dict; it will be added for
         you.
     """
-    del targets, forcings, optional_kwargs
-    batch_size = inputs.sizes['batch']
-    dummy_loss = xarray_jax.DataArray(jnp.zeros(batch_size), dims=('batch',))
-    return dummy_loss, {}  # pytype: disable=bad-return-type
+    return 0, {"forecast_mse": 0.}  # pytype: disable=bad-return-type
 
   def loss_and_predictions(
       self,
