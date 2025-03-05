@@ -20,23 +20,10 @@ from graphcast import xarray_tree
 import xarray
 
 class StackedInputsResidualsDeviations(StackedInputsAndResiduals):
-    """In addition to the normalization and residual framework, compute diagnostics
-    from predictions and targets that get added to the loss function.
+    """In addition to the normalization and residual framework, compute deviation loss term
 
-    This is tricky because:
-    * loss is computed in normalized space
-    * diagnostics are computed in un-normalized space
-
-    So the loss function has to have access to
-    * predictions: normalized and un-normalized
-    * targets: same
-    * predicted_diagnostics: normalized (and un-normalized for the routine returning predictions)
-    * predicted_targets: normalized
-
-    While it is easy to pass the prediction routine through the Bfloat16 casting,
-    it is not easy to do this for the loss function calculation...
-    So for now, predictions might be in half precision, but loss is in single.
-    This should be fine, esp. since the prediction part is where memory matters most anyway.
+    In terms of precision, this is similar to the diagnostics loss, because we have to do some
+    custom stuff in the loss_and_predictions function.
     """
 
     def __init__(
@@ -45,7 +32,7 @@ class StackedInputsResidualsDeviations(StackedInputsAndResiduals):
         stddev_by_level: dict,
         mean_by_level: dict,
         diffs_stddev_by_level: dict,
-        spread_by_level: chex.Array, # since this is only for the target space
+        deviation_stddev_by_level: dict,
         last_input_channel_mapping: dict,
     ):
         super().__init__(
@@ -57,11 +44,35 @@ class StackedInputsResidualsDeviations(StackedInputsAndResiduals):
         )
 
         self._deviation_locations = None
-        self._deviation_scales = spread_by_level
+        self._deviation_scales = deviation_stddev_by_level
         self._checkit(self._deviation_scales)
 
+    def __call__(
+        self,
+        inputs: chex.Array,
+    ) -> chex.Array:
+        """Note that __call__ works on both ensemble members in the pair,
+        but self.normalized_predict works on a single ensemble member...
+        Reason being:
+            * this one is just so we can use all the same machinery for "construct_wrapped_graphcast" and "init_model"
+            * the other is more of a utility function for this and the loss function, should have a preceding underscore
+
+        Returns shape
+        [n_samples, n_members=2, n_latitude, n_longitude, n_channels]
+        """
+        predictions = []
+        for this_input in [inputs[:, 0, ...], inputs[:, 1, ...]]:
+            this_norm_prediction = self.normalized_predict(this_input)
+            this_prediction = self._unnormalize_prediction_and_add_input(this_input, this_norm_prediction)
+            predictions.append(
+                this_prediction[None]
+            )
+
+        predictions = jnp.concatenate(predictions).swapaxes(0, 1)
+        return predictions
+
     def normalize_deviations(self, deviations):
-        return normalize(deviations, self._deviation_scales, self._deviation_locations)
+        return normalize(deviations, self._deviation_scales["targets"], self._deviation_locations["targets"])
 
     def loss(
         self,
@@ -72,9 +83,6 @@ class StackedInputsResidualsDeviations(StackedInputsAndResiduals):
     ) -> StackedLossAndChannelLoss:
         (loss, loss_per_channel), _ = self.loss_and_predictions(inputs, targets, weights, deviation_weights)
         return loss, loss_per_channel
-
-    def _isel(index, array):
-        return array[:, index, ...]
 
     def loss_and_predictions(  # pytype: disable=signature-mismatch  # jax-ndarray
         self,
@@ -92,39 +100,42 @@ class StackedInputsResidualsDeviations(StackedInputsAndResiduals):
         """
 
         # compute normalized and unnormalized prediction for each initial condition
-        norm_predictions = tuple(
-            self.normalized_predict(inputs[:,0,...]),
-            self.normalized_predict(inputs[:,1,...]),
-        )
-        predictions = tuple(
-            self._unnormalize_prediction_and_add_input(inputs[:, 0, ...], norm_predictions[0]),
-            self._unnormalize_prediction_and_add_input(inputs[:, 1, ...], norm_predictions[1]),
-        )
+        predictions = []
+        forecast_mse_per_member = []
+        forecast_mse_per_member_per_channel = []
+        for this_input, this_target in zip(
+            [inputs[:,0,...], inputs[:,1,...]],
+            [targets[:,0,...], targets[:,1,...]],
+        ):
 
-        # compute deviation in un-normalized space
+            # first, compute forecast and MSE in normalized space
+            this_norm_prediction = self.normalized_predict(this_input)
+            this_norm_target_residual = self._subtract_input_and_normalize_target(this_input, this_target)
+
+            loss1, loss2 = stacked_mse(this_norm_prediction, this_norm_target_residual)
+            forecast_mse_per_member.append(loss1)
+            forecast_mse_per_member_per_channel.append(loss1)
+
+            # now get unnormalized predictions for deviation
+            predictions.append(
+                self._unnormalize_prediction_and_add_input(this_input, this_norm_predictions)
+            )
+
+        # compute deviations in un-normalized space
         prediction_deviations = predictions[1] - predictions[0]
         norm_prediction_deviations = self.normalize_deviations(prediction_deviations)
 
-        # prepare targets
-        norm_target_residuals = tuple(
-            self._subtract_input_and_normalize_target(inputs[:, 0, ...], targets[:, 0, ...]),
-            self._subtract_input_and_normalize_target(inputs[:, 1, ...], targets[:, 1, ...]),
-        )
         target_deviations = targets[1] - targets[0]
         norm_target_deviations = self.normalize_deviations(target_deviations)
 
-        # MSE loss function from each member
-        mse_per_member = []
-        mse_per_member_per_channel = []
-        for pp, tt in zip(norm_predictions, norm_target_residuals):
-            loss1, loss2 = stacked_mse(pp, tt, weights)
-            mse_per_member.append(loss1)
-            mse_per_member_per_channel.append(loss2)
-
         # MSE loss of deviations
-        deviation_mse, deviation_mse_per_channel = stacked_mse(pp, tt, deviation_weights)
+        deviation_mse, deviation_mse_per_channel = stacked_mse(
+            norm_prediction_deviations,
+            norm_target_deviations,
+            deviation_weights,
+        )
 
         # put it all together now
-        loss = jnp.sum(mse_per_member, axis=0) + deviation_mse
-        loss_per_channel = jnp.sum(mse_per_member_per_channel, axis=0) + deviation_mse_per_channel
+        loss = jnp.sum(forecast_mse_per_member, axis=0) + deviation_mse
+        loss_per_channel = jnp.sum(forecast_mse_per_member_per_channel, axis=0) + deviation_mse_per_channel
         return (loss, loss_per_channel), predictions
