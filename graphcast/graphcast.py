@@ -192,7 +192,7 @@ class TaskConfig:
   forcing_variables: tuple[str, ...]
   pressure_levels: tuple[int, ...]
   input_duration: str
-  ocn_vert_levels: tuple[int, ...] = None
+  ocn_vert_levels: Optional[tuple[int, ...] | None] = None
   longitude: Optional[tuple[float, ...] | None] = None
   latitude: Optional[tuple[float, ...] | None] = None
 
