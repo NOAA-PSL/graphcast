@@ -3,12 +3,13 @@ import xarray
 import chex
 import jax.numpy as jnp
 import numpy as np
-
+import jax.debug as jdb
 from graphcast.losses import stacked_mse
 from graphcast.stacked_predictor_base import StackedPredictor, StackedLossAndDiagnostics
 from graphcast.graphcast import GraphCast, ModelConfig, TaskConfig
 from graphcast import xarray_jax
 from graphcast.stacked_utils import get_channel_index, search_nested_dict
+import matplotlib.pyplot as plt
 
 class StackedGraphCast(GraphCast, StackedPredictor):
 
@@ -88,8 +89,10 @@ class StackedGraphCast(GraphCast, StackedPredictor):
         ###  Apply appropriate masks here, like in graphcast.py
         assert all((meta_inputs is not None, meta_targets is not None)), \
                 "meta data for either inputs or targets is missing"
+        assert targets.shape[-1]==len(meta_targets), "Number of channels in targets and its meta_data are not equal"
+        assert inputs.shape[-1]>=len(meta_inputs), "Number of channels in inputs is less than in its meta data" 
 
-        _, dict_ocean_static_3d = search_nested_dict(meta_inputs, "varname", "ocean_static_3d")
+        _, dict_landsea_mask = search_nested_dict(meta_inputs, "varname", "landsea_mask")
         cidx_land_static, dict_land_static = search_nested_dict(meta_inputs, "varname", "land_static")
         common_2d_ocn_vars = ["ssh"]
         common_2d_land_vars = ["soilm"]
@@ -112,8 +115,9 @@ class StackedGraphCast(GraphCast, StackedPredictor):
                 predictions = predictions.at[..., cidx].set(predictions[..., cidx]*binary_mask)
 
             elif "z_l" in meta_cidx:
-                ch_vert, _  = search_nested_dict(dict_ocean_static_3d, "z_l", meta_cidx["z_l"])
+                ch_vert, _  = search_nested_dict(dict_landsea_mask, "z_l", meta_cidx["z_l"])
                 normalized_mask = jnp.squeeze(inputs[..., ch_vert])
+                # the below is assuming that landsea_mask is having 1 at oceans and 0 at land
                 binary_mask = jnp.where(normalized_mask>0, 1, 0)
                 predictions = predictions.at[..., cidx].set(predictions[..., cidx]*binary_mask)
 
