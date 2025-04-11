@@ -224,6 +224,17 @@ TASK_13_PRECIP_OUT = TaskConfig(
     input_duration="12h",
 )
 
+@chex.dataclass(frozen=True, eq=True)
+class TaskConfigOcnOnly:
+  """Defines inputs and targets on which a model is trained and/or evaluated."""
+  input_variables: tuple[str, ...]
+  # Target variables which the model is expected to predict.
+  target_variables: tuple[str, ...]
+  forcing_variables: tuple[str, ...]
+  input_duration: str
+  ocn_vert_levels: Optional[tuple[int, ...] | None] = None
+  longitude: Optional[tuple[float, ...] | None] = None
+  latitude: Optional[tuple[float, ...] | None] = None
 
 @chex.dataclass(frozen=True, eq=True)
 class ModelConfig:
@@ -263,6 +274,13 @@ class CheckPoint:
   description: str
   license: str
 
+@chex.dataclass(frozen=True, eq=True)
+class CheckPointOcnOnly:
+  params: dict[str, Any]
+  model_config: ModelConfig
+  task_config: TaskConfigOcnOnly
+  description: str
+  license: str
 
 class GraphCast(predictor_base.Predictor):
   """GraphCast Predictor.

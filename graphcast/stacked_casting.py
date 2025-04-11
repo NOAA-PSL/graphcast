@@ -92,7 +92,39 @@ class StackedBfloat16Cast(Bfloat16Cast):
             input_dtype=jnp.bfloat16,
             output_dtype=targets_dtype,
         )
+    
+    def loss_coupled(
+        self,
+        inputs: chex.Array,
+        targets: chex.Array,
+        weights: Optional[chex.Array | None] = None
+        ) -> StackedLossAndDiagnostics:
+        if not self._enabled:
+            return self._predictor.loss_coupled(inputs, targets, weights)
 
+        with bfloat16_variable_view():
+            loss, scalars = self._predictor.loss_coupled(
+                *_inputs_targets_weights_to_bfloat16(
+                    inputs,
+                    targets,
+                    weights,
+                )
+            )
+
+        if loss.dtype != jnp.bfloat16:
+            raise ValueError(f'Expected bfloat16 loss, got {loss.dtype}')
+
+        targets_dtype = infer_floating_dtype(targets)  # pytype: disable=wrong-arg-types
+
+        # Note that casting back the loss to e.g. float32 should not affect data
+        # types of the backwards pass, because the first thing the backwards pass
+        # should do is to go backwards the casting op and cast back to bfloat16
+        # (and xprofs seem to confirm this).
+        return tree_map_cast(
+            (loss, scalars),
+            input_dtype=jnp.bfloat16,
+            output_dtype=targets_dtype,
+        )
     def loss_and_predictions(  # pytype: disable=signature-mismatch  # jax-ndarray
         self,
         inputs: chex.Array,
@@ -109,6 +141,42 @@ class StackedBfloat16Cast(Bfloat16Cast):
 
         with bfloat16_variable_view():
             (loss, scalars), predictions = self._predictor.loss_and_predictions(
+                *_inputs_targets_weights_to_bfloat16(
+                    inputs,
+                    targets,
+                    weights,
+                )
+            )
+
+        if loss.dtype != jnp.bfloat16:
+            raise ValueError(f'Expected bfloat16 loss, got {loss.dtype}')
+
+        predictions_dtype = infer_floating_dtype(predictions)  # pytype: disable=wrong-arg-types
+        if predictions_dtype != jnp.bfloat16:
+            raise ValueError(f'Expected bfloat16 output, got {predictions_dtype}')
+
+        targets_dtype = infer_floating_dtype(targets)  # pytype: disable=wrong-arg-types
+        return tree_map_cast(
+            ((loss, scalars), predictions),
+            input_dtype=jnp.bfloat16,
+            output_dtype=targets_dtype,
+        )
+    def loss_and_predictions_coupled(  # pytype: disable=signature-mismatch  # jax-ndarray
+        self,
+        inputs: chex.Array,
+        targets: chex.Array,
+        weights: Optional[chex.Array | None] = None
+        ) -> Tuple[StackedLossAndDiagnostics,
+                   chex.Array]:
+        if not self._enabled:
+            return self._predictor.loss_and_predictions_coupled(
+                inputs,
+                targets,
+                weights,
+            )
+
+        with bfloat16_variable_view():
+            (loss, scalars), predictions = self._predictor.loss_and_predictions_coupled(
                 *_inputs_targets_weights_to_bfloat16(
                     inputs,
                     targets,
