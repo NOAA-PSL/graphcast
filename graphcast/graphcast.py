@@ -41,6 +41,7 @@ import jax.numpy as jnp
 import jraph
 import numpy as np
 import xarray
+import jax.debug as jdb 
 
 Kwargs = Mapping[str, Any]
 
@@ -232,7 +233,7 @@ class TaskConfigOcnOnly:
   target_variables: tuple[str, ...]
   forcing_variables: tuple[str, ...]
   input_duration: str
-  ocn_vert_levels: Optional[tuple[int, ...] | None] = None
+  ocn_vert_levels: tuple[int, ...] | None = None
   longitude: Optional[tuple[float, ...] | None] = None
   latitude: Optional[tuple[float, ...] | None] = None
 
@@ -891,7 +892,7 @@ class GraphCast(predictor_base.Predictor):
     stacked_forcings = model_utils.dataset_to_stacked(forcings)
     stacked_inputs = xarray.concat(
         [stacked_inputs, stacked_forcings], dim="channels")
-
+    jdb.print("stacked_inputs, original graphcast:{x}", x=stacked_inputs)
     # xarray `DataArray` (batch, lat, lon, channels)
     # to single numpy array with shape [lat_lon_node, batch, channels]
     grid_xarray_lat_lon_leading = model_utils.lat_lon_to_leading_axes(
@@ -905,7 +906,7 @@ class GraphCast(predictor_base.Predictor):
       targets_template: xarray.Dataset,
       ) -> xarray.Dataset:
     """[num_grid_nodes, batch, num_outputs] -> xarray."""
-
+    jdb.print("grid_node_outputs, original graphcast:{x}", x=grid_node_outputs)
     # numpy array with shape [lat_lon_node, batch, channels]
     # to xarray `DataArray` (batch, lat, lon, channels)
     assert self._grid_lat is not None and self._grid_lon is not None
