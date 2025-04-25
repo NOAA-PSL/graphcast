@@ -41,7 +41,6 @@ import jax.numpy as jnp
 import jraph
 import numpy as np
 import xarray
-import jax.debug as jdb 
 
 Kwargs = Mapping[str, Any]
 
@@ -377,7 +376,6 @@ class GraphCast(predictor_base.Predictor):
         num_outputs += len(task_config.pressure_levels) * num_atmospheric_vars 
     if task_config.ocn_vert_levels is not None:
         num_outputs +=  len(task_config.ocn_vert_levels) * num_ocean_vars
-
     # Decoder, which moves data from the mesh back into the grid with a single
     # message passing step.
     self._mesh2grid_gnn = deep_typed_graph_net.DeepTypedGraphNet(
@@ -892,7 +890,6 @@ class GraphCast(predictor_base.Predictor):
     stacked_forcings = model_utils.dataset_to_stacked(forcings)
     stacked_inputs = xarray.concat(
         [stacked_inputs, stacked_forcings], dim="channels")
-    jdb.print("stacked_inputs, original graphcast:{x}", x=stacked_inputs)
     # xarray `DataArray` (batch, lat, lon, channels)
     # to single numpy array with shape [lat_lon_node, batch, channels]
     grid_xarray_lat_lon_leading = model_utils.lat_lon_to_leading_axes(
@@ -906,7 +903,6 @@ class GraphCast(predictor_base.Predictor):
       targets_template: xarray.Dataset,
       ) -> xarray.Dataset:
     """[num_grid_nodes, batch, num_outputs] -> xarray."""
-    jdb.print("grid_node_outputs, original graphcast:{x}", x=grid_node_outputs)
     # numpy array with shape [lat_lon_node, batch, channels]
     # to xarray `DataArray` (batch, lat, lon, channels)
     assert self._grid_lat is not None and self._grid_lon is not None

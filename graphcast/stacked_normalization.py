@@ -13,7 +13,6 @@ from graphcast.stacked_predictor_base import StackedPredictor, StackedLossAndDia
 from graphcast import xarray_tree
 import xarray
 
-
 def normalize(values: chex.Array,
               scales: chex.Array,
               locations: Optional[chex.Array],
@@ -22,7 +21,7 @@ def normalize(values: chex.Array,
     result = values
     if locations is not None:
         result -= locations.astype(values.dtype)
-
+    
     result /= scales.astype(values.dtype)
     return result
 

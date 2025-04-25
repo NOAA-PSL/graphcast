@@ -25,7 +25,6 @@ from graphcast import predictor_base
 from graphcast import xarray_tree
 import xarray
 
-
 def normalize(values: xarray.Dataset,
               scales: xarray.Dataset,
               locations: Optional[xarray.Dataset],
@@ -33,17 +32,17 @@ def normalize(values: xarray.Dataset,
   """Normalize variables using the given scales and (optionally) locations."""
   def normalize_array(array):
     if array.name is None:
-      raise ValueError(
-          "Can't look up normalization constants because array has no name.")
+        raise ValueError(
+                "Can't look up normalization constants because array has no name.")
     if locations is not None:
-      if array.name in locations:
-        array = array - locations[array.name].astype(array.dtype)
-      else:
-        logging.warning('No normalization location found for %s', array.name)
+        if array.name in locations:
+            array = array - locations[array.name].astype(array.dtype)
+        else:
+            logging.warning('No normalization location found for %s', array.name)
     if array.name in scales:
-      array = array / scales[array.name].astype(array.dtype)
+        array = array / scales[array.name].astype(array.dtype)
     else:
-      logging.warning('No normalization scale found for %s', array.name)
+        logging.warning('No normalization scale found for %s', array.name)
     return array
   return xarray_tree.map_structure(normalize_array, values)
 

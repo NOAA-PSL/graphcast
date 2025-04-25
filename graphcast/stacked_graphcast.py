@@ -3,7 +3,6 @@ import xarray
 import chex
 import jax.numpy as jnp
 import numpy as np
-import jax.debug as jdb
 from graphcast.losses import stacked_mse
 from graphcast.stacked_predictor_base import StackedPredictor, StackedLossAndDiagnostics
 from graphcast.graphcast import GraphCast, ModelConfig, TaskConfig
@@ -19,7 +18,6 @@ class StackedGraphCast(GraphCast, StackedPredictor):
         task_config: TaskConfig
         ):
         super().__init__(model_config=model_config, task_config=task_config)
-
         # since we don't use xarray DataArrays as inputs, we have to
         # establish the grid somehow. Seems easiest to pass it via task_config
         # just like the pressure levels
@@ -191,7 +189,6 @@ class StackedGraphCast(GraphCast, StackedPredictor):
         grid_node_outputs: chex.Array,
         ) -> chex.Array:
         """returned as [batch, lat, lon, channels] or [lat, lon, channels]"""
-
         assert self._grid_lat is not None and self._grid_lon is not None
         grid_shape = (self._grid_lat.shape[0], self._grid_lon.shape[0])
 
