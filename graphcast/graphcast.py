@@ -478,11 +478,12 @@ class GraphCast(predictor_base.Predictor):
     # Artificially zero out masked areas for ocean, sea ice and land variables
     for var in predictions:
         if "landsea_mask" in inputs:
+            # the below code assumes that land is 1 and oceans are 0 in landsea_mask
             if "z_l" in predictions[var].dims:
-                predictions[var] = predictions[var]*inputs["landsea_mask"]
+                predictions[var] = predictions[var]*(1-inputs["landsea_mask"])
 
             elif var.lower() == "ssh":
-                predictions[var] = predictions[var]*inputs["landsea_mask"].isel(z_l=0)
+                predictions[var] = predictions[var]*(1-inputs["landsea_mask"].isel(z_l=0))
 
             elif var.lower() == "land":
                 print("Rounding off land values to the nearest integer")
@@ -494,7 +495,7 @@ class GraphCast(predictor_base.Predictor):
                     icemask = xarray.where(mask==2, 1, 0) # ice=2 in the mask
                     predictions[var] = predictions[var]*icemask
                 else:
-                    predictions[var] = predictions[var]*inputs["landsea_mask"]
+                    predictions[var] = predictions[var]*(1-inputs["landsea_mask"])
 
             elif var.startswith("soil"):
                 if "land" in predictions:
