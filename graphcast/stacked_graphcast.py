@@ -82,48 +82,57 @@ class StackedGraphCast(GraphCast, StackedPredictor):
         meta_inputs: Optional[chex.Array | None] = None,
         meta_targets: Optional[chex.Array | None] = None
         ) -> tuple[StackedLossAndDiagnostics, chex.Array]:
+
         # Forward pass
         predictions = self(inputs)
-        ###  Apply appropriate masks here, like in graphcast.py
-        assert all((meta_inputs is not None, meta_targets is not None)), \
+        
+        # Sanity checks
+        assert meta_inputs is not None and meta_targets is not None, \
                 "meta data for either inputs or targets is missing"
-        assert targets.shape[-1]==len(meta_targets), "Number of channels in targets and its meta_data are not equal"
-        assert inputs.shape[-1]>=len(meta_inputs), "Number of channels in inputs is less than in its meta data" 
+        assert targets.shape[-1] == len(meta_targets), \
+                "Mismatch between number of target channels and target meta-data entries"
+        assert inputs.shape[-1] >= len(meta_inputs), \
+                "Mismatch between number of input channels and input meta-data entries" 
 
         _, dict_landsea_mask = search_nested_dict(meta_inputs, "varname", "landsea_mask")
         cidx_land_static, dict_land_static = search_nested_dict(meta_inputs, "varname", "land_static")
-        common_2d_ocn_vars = ["ssh"]
-        common_2d_land_vars = ["soilm"]
+        
+        ocean_2d_vars = ["ssh", "lw", "sw"]
+        land_2d_vars = ["soilm", "snowc_ave", "veg"]
 
-        for cidx in list(meta_targets.keys()):
-            meta_cidx = meta_targets[cidx]
-            varname = meta_cidx["varname"]
+        mask = jnp.ones_like(predictions)
+
+        for cidx, meta_cidx in meta_targets.items():
+            #meta_cidx = meta_targets[cidx]
+            varname = meta_cidx["varname"].lower()
+
             # Note: use land_static to mask ssh and other surface ocean variables
             # as the top layer of 3D FV regridded landsea_mask may not be very close
             # to the surface
-            if (varname.lower() in common_2d_ocn_vars
-                or varname.lower() in common_2d_land_vars
-                or varname.lower().startswith("ice")
-                ):
+            if (varname in ocean_2d_vars or varname in land_2d_vars or varname.startswith("ice")):
                 normalized_mask = jnp.squeeze(inputs[..., cidx_land_static])
-                if varname.lower() in common_2d_ocn_vars or varname.lower().startswith("ice"):
-                    binary_mask = jnp.where(normalized_mask>0, 0, 1)
-                else:
-                    binary_mask = jnp.where(normalized_mask>0, 1, 0)
-                predictions = predictions.at[..., cidx].set(predictions[..., cidx]*binary_mask)
+                binary_mask = jnp.where(normalized_mask > 0,
+                                        0 if varname in ocean_2d_vars or varname.startswith("ice") else 1,
+                                        1 if varname in ocean_2d_vars or varname.startswith("ice") else 0,
+                )
+                mask = mask.at[..., cidx].set(binary_mask)
+                continue
 
-            elif "z_l" in meta_cidx:
+            if "z_l" in meta_cidx:
                 ch_vert, _  = search_nested_dict(dict_landsea_mask, "z_l", meta_cidx["z_l"])
                 normalized_mask = jnp.squeeze(inputs[..., ch_vert])
-                # the below is assuming that landsea_mask is having 1 at oceans and 0 at land
-                binary_mask = jnp.where(normalized_mask>0, 1, 0)
-                predictions = predictions.at[..., cidx].set(predictions[..., cidx]*binary_mask)
+                # the below is assuming that landsea_mask is having 1 at land and 0 at oceans --
+                # just like in MOM6 replay and in land_static
+                binary_mask = jnp.where(normalized_mask>0, 0, 1)
+                mask = mask.at[..., cidx].set(binary_mask)
 
         # Compute loss
+        # Note: mask will be applied to mse loss, not individually to predictions and targets
         loss, diagnostics = stacked_mse(
             predictions=predictions,
             targets=targets,
             weights=weights,
+            binary_mask = mask,
         )
         return (loss, diagnostics), predictions
 
