@@ -18,6 +18,7 @@ from typing import Mapping, Optional
 import chex
 from graphcast import xarray_tree
 import numpy as np
+import jax.numpy as jnp
 from typing_extensions import Protocol
 import xarray
 
@@ -61,6 +62,7 @@ def stacked_mse(
     predictions: chex.Array,
     targets: chex.Array,
     weights: Optional[chex.Array | None] = None,
+    binary_mask: Optional[chex.Array | None] = None,
 ) -> StackedLossAndDiagnostics:
     """A very streamlined MSE loss function
     preserves final channel dimension
@@ -75,17 +77,39 @@ def stacked_mse(
         latlon = (0, 1)
     else:
         latlon = (1, 2)
-        if weights is not None:
-            weights = weights[None] if weights.ndim == 3 else weights
+        if weights is not None and weights.ndim == 3:
+            weights = weights[None]
 
     # compute loss
     loss = (predictions - targets)**2
+    
+    # mask
+    if binary_mask is not None:
+        loss *= binary_mask
+
+    # weight the loss, if provided
     if weights is not None:
         loss *= weights
 
     # recall prediction shape is (samples (batch), lat, lon, channels)
     loss_per_sample_channel = loss.sum(axis=latlon)
+
+    if binary_mask is not None:
+        denom = binary_mask
+        denom_sum = denom.sum(axis=latlon)
+
+        # Avoid division by zero
+        loss_per_sample_channel = jnp.where(
+                denom_sum > 0,
+                loss_per_sample_channel/denom_sum,
+                0.0,
+        )
+    else:
+        denom_sum = jnp.size(loss, axis=latlon) 
+        loss_per_sample_channel = loss_per_sample_channel/denom_sum
+
     loss_per_sample = loss_per_sample_channel.sum(axis=-1)
+    
     return loss_per_sample, loss_per_sample_channel
 
 
