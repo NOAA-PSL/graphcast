@@ -124,7 +124,7 @@ def chunked_prediction_generator(
   if "datetime" in forcings.coords:
     del forcings.coords["datetime"]
 
-  num_target_steps = targets_template.dims["time"]
+  num_target_steps = targets_template.sizes["time"]
   num_chunks, remainder = divmod(num_target_steps, num_steps_per_chunk)
   if remainder != 0:
     raise ValueError(
