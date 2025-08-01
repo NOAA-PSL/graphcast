@@ -112,7 +112,7 @@ class Predictor(predictor_base.Predictor):
                        f'forcings, which isn\'t allowed: {overlap}')
 
   def _update_inputs(self, inputs, next_frame):
-    num_inputs = inputs.dims['time']
+    num_inputs = inputs.sizes['time']
 
     predicted_or_forced_inputs = next_frame[list(inputs.keys())]
 

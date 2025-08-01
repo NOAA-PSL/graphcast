@@ -97,7 +97,7 @@ class StackedGraphCast(GraphCast, StackedPredictor):
         _, dict_landsea_mask = search_nested_dict(meta_inputs, "varname", "landsea_mask")
         cidx_land_static, dict_land_static = search_nested_dict(meta_inputs, "varname", "land_static")
         
-        ocean_2d_vars = ["ssh", "lw", "sw"]
+        ocean_2d_vars = ["ssh", "lw", "sw", "depth"]
         land_2d_vars = ["soilm", "snowc_ave", "veg"]
 
         mask = jnp.ones_like(predictions)
