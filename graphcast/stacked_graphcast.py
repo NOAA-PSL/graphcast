@@ -80,7 +80,9 @@ class StackedGraphCast(GraphCast, StackedPredictor):
         targets: chex.Array,
         weights: Optional[chex.Array | None] = None,
         meta_inputs: Optional[chex.Array | None] = None,
-        meta_targets: Optional[chex.Array | None] = None
+        meta_targets: Optional[chex.Array | None] = None,
+        use_mahalanobis_loss: Optional[bool] = False,
+        covariance: Optional[chex.Array | None] = None,
         ) -> tuple[StackedLossAndDiagnostics, chex.Array]:
 
         # Forward pass
@@ -133,6 +135,8 @@ class StackedGraphCast(GraphCast, StackedPredictor):
             targets=targets,
             weights=weights,
             binary_mask = mask,
+            use_mahalanobis_loss=use_mahalanobis_loss,
+            covariance=covariance,
         )
         return (loss, diagnostics), predictions
 
@@ -159,9 +163,12 @@ class StackedGraphCast(GraphCast, StackedPredictor):
         weights: Optional[chex.Array | None] = None,
         meta_inputs: Optional[chex.Array | None] = None,
         meta_targets: Optional[chex.Array | None] = None,
+        use_mahalanobis_loss: Optional[bool] = False, 
+        covariance: Optional[chex.Array | None] = None,
         ) -> StackedLossAndDiagnostics:
 
-        (loss, diagnostics), _ = self.loss_and_predictions_coupled(inputs, targets, weights, meta_inputs, meta_targets)
+        (loss, diagnostics), _ = self.loss_and_predictions_coupled(inputs, targets, weights, 
+            meta_inputs, meta_targets, use_mahalanobis_loss, covariance,)
         return loss, diagnostics
 
     def _maybe_init(self):

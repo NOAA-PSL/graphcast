@@ -16,11 +16,13 @@
 from typing import Mapping, Optional
 
 import chex
+import xarray
 from graphcast import xarray_tree
+from jax.scipy.linalg import solve_triangular
+from typing_extensions import Protocol
 import numpy as np
 import jax.numpy as jnp
-from typing_extensions import Protocol
-import xarray
+import jax.debug as jdb
 
 
 # (total loss per sample, loss per variable per sample)
@@ -63,6 +65,8 @@ def stacked_mse(
     targets: chex.Array,
     weights: Optional[chex.Array | None] = None,
     binary_mask: Optional[chex.Array | None] = None,
+    use_mahalanobis_loss: Optional[bool] = False,
+    covariance: Optional[chex.Array | None] = None,
 ) -> StackedLossAndDiagnostics:
     """A very streamlined MSE loss function
     preserves final channel dimension
@@ -72,6 +76,30 @@ def stacked_mse(
         loss_per_sample_channel (chex.Array): total loss per channel and per sample
 
     """
+    def mahalanobis_loss(pred, target, L):
+        """
+        pred, target:
+        L: [ch, ch] (lower triangular component of the cholesky decomp of cov)
+        """
+        diff = pred - target  # shape: [(b)atch, lat, lon, (ch)annels]
+        b, nlat, nlon, ch = diff.shape
+        diff_flat = diff.reshape(-1, ch)  # [N, ch] where N = b*lat*lon
+ 
+        # Apply L^{-1} to each error vector: Mahalanobis transform
+        #jdb.print("starting solving system of linear equation")
+        L_inv = jnp.linalg.inv(L) # (ch, ch)
+        z = diff_flat @ L_inv.T   # (N, ch)
+        #z_T = solve_triangular(L, diff_flat.T, lower=True)  # [ch, N]
+        #jdb.print("solved the linear system")
+        #z = z_T.T  # [N, Ch]
+
+        # Square (per-channel contribution) — keep same shape as input
+        mahalanobis_sq_flat = z**2  # [N, Ch]
+        mahalanobis_sq = mahalanobis_sq_flat.reshape(b, nlat, nlon, ch)  # same as pred 
+       
+        return mahalanobis_sq
+
+
     # handle potential broadcasting to batch dimension
     if predictions.ndim == 3:
         latlon = (0, 1)
@@ -81,7 +109,12 @@ def stacked_mse(
             weights = weights[None]
 
     # compute loss
-    loss = (predictions - targets)**2
+    if use_mahalanobis_loss and covariance is not None:
+        # Cholesky decomposition: L @ L.T
+        L = jnp.linalg.cholesky(covariance)  # [ch, ch]
+        loss = mahalanobis_loss(predictions, targets, L) 
+    else:
+        loss = (predictions - targets)**2
     
     # mask
     if binary_mask is not None:
